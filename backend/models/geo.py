@@ -1,0 +1,108 @@
+"""Geospatial catalogs: countries, states, and H3 cell registry."""
+
+from datetime import datetime
+
+from geoalchemy2 import Geometry
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import relationship
+
+from database import Base
+
+
+class CountryRegion(Base):
+    """Country catalog with geometry and precomputed land cell totals."""
+
+    __tablename__ = "regions_country"
+    __table_args__ = (
+        UniqueConstraint("iso2", name="uq_regions_country_iso2"),
+        UniqueConstraint("iso3", name="uq_regions_country_iso3"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    iso2 = Column(String(2), nullable=False, index=True)
+    iso3 = Column(String(3), nullable=False, index=True)
+    name = Column(String(128), nullable=False, index=True)
+    geom = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
+    land_cells_total = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    states = relationship("StateRegion", back_populates="country")
+
+
+class StateRegion(Base):
+    """State/province catalog linked to a country."""
+
+    __tablename__ = "regions_state"
+    __table_args__ = (
+        UniqueConstraint("country_id", "code", name="uq_regions_state_code"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    country_id = Column(
+        Integer,
+        ForeignKey("regions_country.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code = Column(String(10), nullable=False, index=True)
+    name = Column(String(128), nullable=False, index=True)
+    geom = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
+    land_cells_total = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    country = relationship("CountryRegion", back_populates="states")
+    h3_cells = relationship("H3Cell", back_populates="state")
+
+
+class H3Cell(Base):
+    """Global registry of visited H3 cells with region lookup."""
+
+    __tablename__ = "h3_cells"
+    __table_args__ = (
+        Index("ix_h3_cells_res", "res"),
+    )
+
+    h3_index = Column(String(25), primary_key=True)
+    res = Column(SmallInteger, nullable=False, index=True)
+    country_id = Column(
+        Integer,
+        ForeignKey("regions_country.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    state_id = Column(
+        Integer,
+        ForeignKey("regions_state.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    centroid = Column(Geometry("POINT", srid=4326), nullable=True)
+    first_visited_at = Column(DateTime, nullable=True)
+    last_visited_at = Column(DateTime, nullable=True)
+    visit_count = Column(Integer, default=1, nullable=False)
+
+    country = relationship("CountryRegion")
+    state = relationship("StateRegion", back_populates="h3_cells")
+    user_visits = relationship("UserCellVisit", back_populates="cell")
+
