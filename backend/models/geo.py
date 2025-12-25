@@ -74,7 +74,7 @@ class StateRegion(Base):
         nullable=False,
         index=True,
     )
-    code = Column(String(10), nullable=False, index=True)
+    code = Column(String(10), nullable=True, index=True)
     name = Column(String(128), nullable=False, index=True)
     geom = Column(_geom_column("MULTIPOLYGON"), nullable=True)
     land_cells_total = Column(Integer, nullable=True)
