@@ -51,12 +51,19 @@ The backend uses environment variables with defaults:
 
 You can create a `.env` file in the `backend` directory if you want to customize these values.
 
+## Initialize the Docker Postgres/PostGIS Database
+The project ships with a PostGIS-enabled database in `docker-compose.yml`. This will create a Postgres container named `app-postgres` listening on host port `5433`.
+
+### Exact commands based on this repo’s config
+- Start DB: `docker compose up -d db`
+- (Optional) set/override DB URL: `export DATABASE_URL=postgresql+psycopg2://appuser:apppass@localhost:5433/appdb`
+- Create tables: `alembic upgrade head`
+- List tables: `docker compose exec db psql -U appuser -d appdb -c "\dt"`
+- Inspect table: `docker compose exec db psql -U appuser -d appdb -c "\d users"` (replace `users` as needed; quit pager with `q`, exit psql with `\q`)
+- Stop DB: `docker compose down`
+
 ## Verify Installation
-Once running, you can:
+Once the API server is running, you can:
 - Visit `http://127.0.0.1:8000` - Root endpoint
 - Visit `http://127.0.0.1:8000/docs` - Interactive API documentation (Swagger UI)
 - Visit `http://127.0.0.1:8000/api/health` - Health check endpoint
-
-## Database
-The SQLite database (`trekkr.db`) will be automatically created in the `backend` directory when you first run the server.
-
