@@ -11,11 +11,26 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
-from database import Base
+from database import Base, DATABASE_URL
+
+# For SQLite without SpatiaLite, use Text columns instead of Geometry
+# (SpatiaLite is often not available, especially on macOS)
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
+
+def _geom_column(geom_type: str, srid: int = 4326):
+    """Return appropriate column type for geometry based on database."""
+    if _is_sqlite:
+        # Store as WKT text for SQLite without SpatiaLite
+        return Text
+    else:
+        # Use proper PostGIS geometry for PostgreSQL
+        return Geometry(geom_type, srid=srid)
 
 
 class CountryRegion(Base):
@@ -31,7 +46,7 @@ class CountryRegion(Base):
     iso2 = Column(String(2), nullable=False, index=True)
     iso3 = Column(String(3), nullable=False, index=True)
     name = Column(String(128), nullable=False, index=True)
-    geom = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
+    geom = Column(_geom_column("MULTIPOLYGON"), nullable=True)
     land_cells_total = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -61,7 +76,7 @@ class StateRegion(Base):
     )
     code = Column(String(10), nullable=False, index=True)
     name = Column(String(128), nullable=False, index=True)
-    geom = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
+    geom = Column(_geom_column("MULTIPOLYGON"), nullable=True)
     land_cells_total = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -84,7 +99,7 @@ class H3Cell(Base):
     )
 
     h3_index = Column(String(25), primary_key=True)
-    res = Column(SmallInteger, nullable=False, index=True)
+    res = Column(SmallInteger, nullable=False)  # Indexed via __table_args__
     country_id = Column(
         Integer,
         ForeignKey("regions_country.id", ondelete="SET NULL"),
@@ -97,7 +112,7 @@ class H3Cell(Base):
         nullable=True,
         index=True,
     )
-    centroid = Column(Geometry("POINT", srid=4326), nullable=True)
+    centroid = Column(_geom_column("POINT"), nullable=True)
     first_visited_at = Column(DateTime, nullable=True)
     last_visited_at = Column(DateTime, nullable=True)
     visit_count = Column(Integer, default=1, nullable=False)

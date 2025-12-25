@@ -1,54 +1,56 @@
 import os
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trekkr.db")
 
-# Create SQLite engine with SpatiaLite extension for geographic queries
+# Determine database type and set appropriate connection args
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
+# Create engine with database-specific options
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Required for SQLite with FastAPI
+    # check_same_thread is SQLite-specific (required for FastAPI's async handling)
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 
 
-@event.listens_for(engine, "connect")
-def load_spatialite(dbapi_conn, connection_record):
-    """Load SpatiaLite extension for geographic queries (optional)."""
-    # Check if extension loading is supported
-    if not hasattr(dbapi_conn, "enable_load_extension"):
-        # Extension loading not supported by this Python/SQLite build
-        return
+# Only register SpatiaLite loader for SQLite databases
+if _is_sqlite:
+    @event.listens_for(engine, "connect")
+    def load_spatialite(dbapi_conn, connection_record):
+        """Load SpatiaLite extension for geographic queries (optional)."""
+        # Check if extension loading is supported
+        if not hasattr(dbapi_conn, "enable_load_extension"):
+            # Extension loading not supported by this Python/SQLite build
+            return
 
-    try:
-        dbapi_conn.enable_load_extension(True)
-        # Try common SpatiaLite library paths
-        spatialite_paths = [
-            "mod_spatialite",
-            "mod_spatialite.so",
-            "mod_spatialite.dylib",
-            "/usr/lib/x86_64-linux-gnu/mod_spatialite.so",
-            "/usr/local/lib/mod_spatialite.dylib",
-            "/opt/homebrew/lib/mod_spatialite.dylib",
-        ]
-        loaded = False
-        for path in spatialite_paths:
-            try:
-                dbapi_conn.load_extension(path)
-                loaded = True
-                break
-            except Exception:
-                continue
-        if not loaded:
-            pass  # SpatiaLite not found, geographic queries will be limited
-    except (AttributeError, Exception):
-        # Extension loading not supported or failed
-        pass
-    finally:
         try:
-            dbapi_conn.enable_load_extension(False)
+            dbapi_conn.enable_load_extension(True)
+            # Try common SpatiaLite library paths
+            spatialite_paths = [
+                "mod_spatialite",
+                "mod_spatialite.so",
+                "mod_spatialite.dylib",
+                "/usr/lib/x86_64-linux-gnu/mod_spatialite.so",
+                "/usr/local/lib/mod_spatialite.dylib",
+                "/opt/homebrew/lib/mod_spatialite.dylib",
+            ]
+            for path in spatialite_paths:
+                try:
+                    dbapi_conn.load_extension(path)
+                    break
+                except Exception:
+                    continue
         except (AttributeError, Exception):
+            # Extension loading not supported or failed
             pass
+        finally:
+            try:
+                dbapi_conn.enable_load_extension(False)
+            except (AttributeError, Exception):
+                pass
 
 
 # Create session factory
@@ -86,13 +88,4 @@ def init_db():
     )
 
     Base.metadata.create_all(bind=engine)
-
-    # Initialize SpatiaLite metadata if extension is loaded
-    with engine.connect() as conn:
-        try:
-            conn.execute(text("SELECT InitSpatialMetaData(1);"))
-            conn.commit()
-        except Exception:
-            # SpatiaLite not available or already initialized
-            pass
 
