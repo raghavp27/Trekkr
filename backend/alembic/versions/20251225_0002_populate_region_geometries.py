@@ -206,9 +206,48 @@ def populate_state_geometries(conn) -> tuple[int, int, list]:
 
 
 def upgrade() -> None:
-    pass
+    """Populate region geometries from Natural Earth 1:10m data."""
+    print("\n" + "=" * 60)
+    print("MIGRATION: Populate Region Geometries")
+    print("=" * 60)
+
+    # Get database connection
+    conn = op.get_bind()
+
+    try:
+        # Populate countries
+        country_matched, country_total, country_unmatched = populate_country_geometries(conn)
+
+        # Populate states
+        state_matched, state_total, state_unmatched = populate_state_geometries(conn)
+
+        # Final summary
+        print("\n" + "=" * 60)
+        print("MIGRATION COMPLETE")
+        print("=" * 60)
+        print(f"Countries: {country_matched}/{country_total} matched")
+        print(f"States: {state_matched}/{state_total} matched")
+        print(f"Total unmatched: {len(country_unmatched) + len(state_unmatched)}")
+        print("=" * 60 + "\n")
+
+    except Exception as e:
+        print(f"\n❌ Migration failed: {e}")
+        raise
 
 
 def downgrade() -> None:
-    pass
+    """Remove all region geometries (set to NULL)."""
+    print("\nDowngrading: Setting region geometries to NULL...")
+
+    conn = op.get_bind()
+
+    # Clear country geometries
+    result = conn.execute(text("UPDATE regions_country SET geom = NULL"))
+    print(f"✓ Cleared {result.rowcount} country geometries")
+
+    # Clear state geometries
+    result = conn.execute(text("UPDATE regions_state SET geom = NULL"))
+    print(f"✓ Cleared {result.rowcount} state geometries")
+
+    print("✓ Downgrade complete\n")
 
