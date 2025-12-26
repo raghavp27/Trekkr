@@ -115,6 +115,104 @@ python scripts/seed_countries.py
 python scripts/seed_states.py
 ```
 
+## Populate Region Geometries (Geographic Boundaries)
+
+After initializing the database with countries and states, you need to populate their geographic boundary data (geometries) for map visualization and spatial queries.
+
+### Prerequisites
+- PostgreSQL/PostGIS database running (see above)
+- Countries and states already seeded (250 countries, 5,096 states)
+- Internet connection (downloads ~30MB from Natural Earth)
+
+### Step 1: Set Database URL
+```bash
+export DATABASE_URL=postgresql+psycopg2://appuser:apppass@localhost:5433/appdb
+```
+
+### Step 2: Run Alembic Migrations
+```bash
+# Apply all pending migrations (includes geometry population)
+alembic upgrade head
+```
+
+**Expected Output:**
+```
+INFO  [alembic.runtime.migration] Running upgrade 20251224_0001 -> 20251225_0002
+
+============================================================
+MIGRATION: Populate Region Geometries
+============================================================
+
+Downloading countries from Natural Earth...
+✓ Loaded 258 countries features
+Processing 258 Natural Earth countries...
+  Updated 10 countries...
+  Updated 20 countries...
+  ... (continues)
+
+✓ Country Summary:
+  Matched: 236
+  Unmatched: 22
+
+Downloading states/provinces from Natural Earth...
+✓ Loaded 4596 states/provinces features
+Processing 4596 Natural Earth states/provinces...
+  Updated 50 states...
+  Updated 100 states...
+  ... (continues)
+
+✓ State Summary:
+  Matched: 4102
+  Unmatched: 494
+
+============================================================
+MIGRATION COMPLETE
+============================================================
+Countries: 236/258 matched
+States: 4102/4596 matched
+Total unmatched: 516
+============================================================
+```
+
+**Migration Time:** ~5-8 minutes (depends on internet speed)
+
+### Step 3: Verify Geometries Populated
+```bash
+# Check countries with geometries
+docker compose exec db psql -U appuser -d appdb -c \
+  "SELECT COUNT(*) FROM regions_country WHERE geom IS NOT NULL;"
+# Expected: 236
+
+# Check states with geometries
+docker compose exec db psql -U appuser -d appdb -c \
+  "SELECT COUNT(*) FROM regions_state WHERE geom IS NOT NULL;"
+# Expected: 4025
+
+# Test a spatial query (which country contains Los Angeles?)
+docker compose exec db psql -U appuser -d appdb -c \
+  "SELECT name FROM regions_country WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(-118.2437, 34.0522), 4326));"
+# Expected: United States
+```
+
+### Coverage Statistics
+After running the migration:
+- **Countries**: 236 out of 250 (94.4% coverage)
+- **States/Provinces**: 4,025 out of 5,096 (79.0% coverage)
+
+Unmatched regions are typically:
+- Disputed territories (Gaza Strip, West Bank, Somaliland)
+- Military zones (UNDOF, Dhekelia)
+- Entities with invalid ISO codes in Natural Earth data
+- Historical administrative divisions that have been reorganized
+
+### Rollback (if needed)
+To remove all geometries and revert to the previous state:
+```bash
+alembic downgrade -1
+```
+
+This sets all `geom` columns to NULL without deleting country/state metadata.
+
 ## Verify Installation
 Once the API server is running, you can:
 - Visit `http://127.0.0.1:8000` - Root endpoint
