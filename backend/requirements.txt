@@ -14,3 +14,4 @@ pycountry>=24.6.1
 geopandas>=0.14.0
 shapely>=2.0.0
 pyproj>=3.6.0
+h3==4.0.0b5
