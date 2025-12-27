@@ -34,7 +34,14 @@ def _geom_column(geom_type: str, srid: int = 4326):
 
 
 class CountryRegion(Base):
-    """Country catalog with geometry and precomputed land cell totals."""
+    """Country catalog with geometry and estimated land cell totals.
+
+    Cell counts are estimated using area-based calculation at multiple H3 resolutions:
+    - Resolution 6 (~36 km² avg cell area): Coarse coverage tracking
+    - Resolution 8 (~0.74 km² avg cell area): Fine-grained coverage tracking
+
+    Estimation method: region_area / average_hexagon_area(resolution)
+    """
 
     __tablename__ = "regions_country"
     __table_args__ = (
@@ -61,7 +68,14 @@ class CountryRegion(Base):
 
 
 class StateRegion(Base):
-    """State/province catalog linked to a country."""
+    """State/province catalog linked to a country.
+
+    Cell counts are estimated using area-based calculation at multiple H3 resolutions:
+    - Resolution 6 (~36 km² avg cell area): Coarse coverage tracking
+    - Resolution 8 (~0.74 km² avg cell area): Fine-grained coverage tracking
+
+    Estimation method: region_area / average_hexagon_area(resolution)
+    """
 
     __tablename__ = "regions_state"
     __table_args__ = (
