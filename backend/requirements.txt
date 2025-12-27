@@ -15,3 +15,4 @@ geopandas>=0.14.0
 shapely>=2.0.0
 pyproj>=3.6.0
 h3==4.4.1  # H3 geospatial indexing for hexagonal grid cells
+slowapi==0.1.9
