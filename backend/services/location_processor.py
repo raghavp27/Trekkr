@@ -215,10 +215,11 @@ class LocationProcessor:
                 if country:
                     # Check if user has any other cells in this country
                     other_cells = self.db.execute(text("""
-                        SELECT 1 FROM user_cell_visits ucv
+                        SELECT ucv.h3_index FROM user_cell_visits ucv
                         JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
                         WHERE ucv.user_id = :user_id
                           AND hc.country_id = :country_id
+                          AND ucv.res = 8
                           AND ucv.h3_index != :current_h3
                         LIMIT 1
                     """), {
@@ -244,6 +245,7 @@ class LocationProcessor:
                         JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
                         WHERE ucv.user_id = :user_id
                           AND hc.state_id = :state_id
+                          AND ucv.res = 8
                           AND ucv.h3_index != :current_h3
                         LIMIT 1
                     """), {
