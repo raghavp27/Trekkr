@@ -9,3 +9,11 @@ from .location import (
     CountryDiscovery,
     StateDiscovery,
 )
+
+from .map import (
+    CountryVisited,
+    RegionVisited,
+    MapSummaryResponse,
+    BoundingBox,
+    MapCellsResponse,
+)
