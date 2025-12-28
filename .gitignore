@@ -1,6 +1,8 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.pyc
+pytest.ini
 *.py[cod]
 *$py.class
 *.so
@@ -40,7 +42,6 @@ build/
 # Node (for any root-level node files)
 node_modules/
 
-/docs/
 .claude
 claude.md
 # Git worktrees

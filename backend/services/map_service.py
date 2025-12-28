@@ -1,7 +1,5 @@
 """Map service for retrieving user's visited areas."""
 
-from typing import Optional
-
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
