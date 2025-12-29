@@ -1,0 +1,25 @@
+Performance Test Results
+============================================================
+
+Test Date: 2025-12-29T05:00:27.337001
+API URL: http://localhost:8000
+Test User: test@test.com
+
+Response Time Statistics (10 requests):
+  Mean:     3.89ms
+  Median:   3.64ms
+  Min:      3.36ms
+  Max:      5.96ms
+  Std Dev:  0.76ms
+
+Target: < 300ms
+Status: PASS (mean 3.89ms < 300ms)
+
+Sample Response Data:
+  Countries Visited:   0
+  Regions Visited:     0
+  Cells (res6):        0
+  Cells (res8):        1000
+  Total Visit Count:   1500
+  Recent Countries:    0
+  Recent Regions:      0
