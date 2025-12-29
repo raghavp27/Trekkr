@@ -6,7 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from database import init_db
-from routers import auth, health, location, map
+from routers import auth, health, location, map, stats
 from routers.location import limiter
 
 
@@ -52,6 +52,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(location.router, prefix="/api/v1/location", tags=["location"])
 app.include_router(map.router, prefix="/api/v1/map", tags=["map"])
+app.include_router(stats.router, prefix="/api/v1/stats", tags=["stats"])
 
 
 @app.get("/")
