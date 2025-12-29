@@ -49,3 +49,44 @@ class RegionsStatsResponse(BaseModel):
 
     total_regions_visited: int
     regions: list[RegionStatResponse]
+
+
+class UserInfoResponse(BaseModel):
+    """User information for profile display."""
+    id: int
+    username: str
+    created_at: datetime
+
+
+class StatsResponse(BaseModel):
+    """Aggregate travel statistics."""
+    countries_visited: int
+    regions_visited: int
+    cells_visited_res6: int
+    cells_visited_res8: int
+    total_visit_count: int
+    first_visit_at: datetime | None
+    last_visit_at: datetime | None
+
+
+class RecentCountryResponse(BaseModel):
+    """Recently visited country."""
+    code: str  # ISO 3166-1 alpha-2
+    name: str
+    visited_at: datetime
+
+
+class RecentRegionResponse(BaseModel):
+    """Recently visited region/state."""
+    code: str  # ISO 3166-2 format (e.g., "US-CA")
+    name: str
+    country_name: str
+    visited_at: datetime
+
+
+class OverviewResponse(BaseModel):
+    """Complete profile overview response."""
+    user: UserInfoResponse
+    stats: StatsResponse
+    recent_countries: list[RecentCountryResponse]
+    recent_regions: list[RecentRegionResponse]

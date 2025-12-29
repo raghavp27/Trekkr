@@ -8,6 +8,14 @@ from models.user import User
 from models.geo import CountryRegion, StateRegion
 from tests.conftest import create_jwt_token
 from tests.fixtures.test_data import SAN_FRANCISCO
+# Verify we can import new response models
+from schemas.stats import (
+    UserInfoResponse,
+    StatsResponse,
+    RecentCountryResponse,
+    RecentRegionResponse,
+    OverviewResponse,
+)
 
 
 @pytest.mark.integration
