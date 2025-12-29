@@ -5,6 +5,8 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from models.user import User
+
 
 class StatsService:
     """Service for stats-related queries."""
@@ -152,4 +154,128 @@ class StatsService:
         return {
             "total_regions_visited": total,
             "regions": regions,
+        }
+
+    def get_overview(self) -> dict:
+        """Get comprehensive profile overview for a user.
+
+        Returns user info, aggregate stats, and recent countries/regions.
+        Uses optimized SQL queries for performance.
+
+        Returns:
+            dict with keys: user, stats, recent_countries, recent_regions
+        """
+        # Fetch user info
+        user = self.db.query(User).filter(User.id == self.user_id).first()
+        if not user:
+            raise ValueError(f"User {self.user_id} not found")
+
+        # Execute main stats query
+        stats_query = text("""
+            WITH user_stats AS (
+              SELECT
+                COUNT(DISTINCT CASE WHEN res = 6 THEN h3_index END) as cells_res6,
+                COUNT(DISTINCT CASE WHEN res = 8 THEN h3_index END) as cells_res8,
+                MIN(first_visited_at) as first_visit,
+                MAX(last_visited_at) as last_visit,
+                COALESCE(SUM(visit_count), 0) as total_visits
+              FROM user_cell_visits
+              WHERE user_id = :user_id
+            ),
+            country_stats AS (
+              SELECT COUNT(DISTINCT hc.country_id) as countries
+              FROM user_cell_visits ucv
+              JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+              WHERE ucv.user_id = :user_id AND ucv.res = 8
+            ),
+            region_stats AS (
+              SELECT COUNT(DISTINCT hc.state_id) as regions
+              FROM user_cell_visits ucv
+              JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+              WHERE ucv.user_id = :user_id AND ucv.res = 8 AND hc.state_id IS NOT NULL
+            )
+            SELECT
+              us.cells_res6,
+              us.cells_res8,
+              us.first_visit,
+              us.last_visit,
+              us.total_visits,
+              cs.countries,
+              rs.regions
+            FROM user_stats us
+            CROSS JOIN country_stats cs
+            CROSS JOIN region_stats rs
+        """)
+
+        stats_row = self.db.execute(stats_query, {"user_id": self.user_id}).fetchone()
+
+        # Fetch recent countries
+        countries_query = text("""
+            SELECT
+              rc.iso2 as code,
+              rc.name,
+              MAX(ucv.last_visited_at) as visited_at
+            FROM user_cell_visits ucv
+            JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+            JOIN regions_country rc ON hc.country_id = rc.id
+            WHERE ucv.user_id = :user_id
+            GROUP BY rc.id, rc.iso2, rc.name
+            ORDER BY visited_at DESC
+            LIMIT 3
+        """)
+
+        countries_rows = self.db.execute(countries_query, {"user_id": self.user_id}).fetchall()
+
+        # Fetch recent regions
+        regions_query = text("""
+            SELECT
+              CONCAT(rc.iso2, '-', rs.code) as code,
+              rs.name,
+              rc.name as country_name,
+              MAX(ucv.last_visited_at) as visited_at
+            FROM user_cell_visits ucv
+            JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+            JOIN regions_state rs ON hc.state_id = rs.id
+            JOIN regions_country rc ON rs.country_id = rc.id
+            WHERE ucv.user_id = :user_id
+            GROUP BY rs.id, rs.code, rs.name, rc.iso2, rc.name
+            ORDER BY visited_at DESC
+            LIMIT 3
+        """)
+
+        regions_rows = self.db.execute(regions_query, {"user_id": self.user_id}).fetchall()
+
+        # Build response structure
+        return {
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "created_at": user.created_at,
+            },
+            "stats": {
+                "countries_visited": stats_row.countries or 0,
+                "regions_visited": stats_row.regions or 0,
+                "cells_visited_res6": stats_row.cells_res6 or 0,
+                "cells_visited_res8": stats_row.cells_res8 or 0,
+                "total_visit_count": stats_row.total_visits or 0,
+                "first_visit_at": stats_row.first_visit,
+                "last_visit_at": stats_row.last_visit,
+            },
+            "recent_countries": [
+                {
+                    "code": row.code,
+                    "name": row.name,
+                    "visited_at": row.visited_at,
+                }
+                for row in countries_rows
+            ],
+            "recent_regions": [
+                {
+                    "code": row.code,
+                    "name": row.name,
+                    "country_name": row.country_name,
+                    "visited_at": row.visited_at,
+                }
+                for row in regions_rows
+            ],
         }
