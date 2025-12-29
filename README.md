@@ -1,6 +1,21 @@
 # Trekkr
 
-A location-based exploration app built with React Native (Expo) and FastAPI.
+A mobile travel journal app that transforms real-world exploration into a visual "fog of war" experience. As you travel, Trekkr reveals an interactive map showing everywhere you've been, using hexagonal H3 cells to track coverage at multiple zoom levels.
+
+## Concept
+
+Trekkr creates a personal exploration map where:
+- **Unexplored areas** appear grayed out (fog of war)
+- **Visited areas** are revealed as you physically travel there
+- **Coverage statistics** show how much of each country/region you've explored
+- **H3 hexagonal grid** provides precise, multi-resolution tracking
+
+## Tech Stack
+
+**Backend:** FastAPI + PostgreSQL/PostGIS + H3 geospatial indexing  
+**Frontend:** React Native (Expo) + Mapbox GL  
+**Database:** PostgreSQL 16 with PostGIS extension  
+**Geospatial:** H3 hexagonal grid system for coverage tracking
 
 ## Project Structure
 
@@ -27,54 +42,84 @@ Trekkr/
 
 ## Features
 
-- 🔐 User authentication (JWT-based)
-- 📍 Location tracking
-- 🗺️ Map integration (Mapbox)
-- 📱 Cross-platform (iOS, Android, Web)
+### Core Functionality
+- 🔐 **JWT Authentication** - Secure user accounts with access/refresh tokens
+- 📍 **Location Ingestion** - GPS tracking with H3 hexagonal cell resolution
+- 🗺️ **Multi-Level Coverage** - Track exploration at country, region, and cell levels
+- 📊 **Statistics** - Coverage percentages, visit counts, and timestamps
+- 🌍 **Global Support** - Country and state/region data for worldwide tracking
+- 🔄 **Real-time Sync** - Device-specific tracking with cloud synchronization
+
+### Technical Features
+- **H3 Geospatial Indexing** - Hierarchical hexagonal grid (res 6 & 8)
+- **PostGIS Integration** - Spatial queries for geographic containment
+- **Rate Limiting** - 120 requests/minute per user for location ingestion
+- **Comprehensive Testing** - 85+ integration tests with 100% pass rate
+- 📱 **Cross-platform** - iOS, Android, Web (Expo framework)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.8+ (for backend)
-- Node.js 18+ (for frontend)
-- npm or yarn
+- **Python 3.12+** (for backend)
+- **Node.js 18+** (for frontend)
+- **Docker & Docker Compose** (for PostgreSQL/PostGIS database)
+- **npm or yarn**
 
 ### Backend Setup
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
+#### 1. Start the Database
 
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   # Windows
-   venv\Scripts\activate
-   # macOS/Linux
-   source venv/bin/activate
-   ```
+Using Docker Compose (recommended):
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+cd backend
+docker compose up -d db
+```
 
-4. (Optional) Create a `.env` file with:
-   ```
-   DATABASE_URL=sqlite:///./trekkr.db
-   SECRET_KEY=your-secret-key-here
-   ```
+This starts PostgreSQL 16 with PostGIS extension on port **5433**.
 
-5. Run the server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+#### 2. Set Up Python Environment
 
-The API will be available at `http://127.0.0.1:8000`
-- API Docs: `http://127.0.0.1:8000/docs`
-- Health Check: `http://127.0.0.1:8000/api/health`
+```bash
+cd backend
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+# OR: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+#### 3. Configure Environment
+
+Create a `.env` file in `backend/` directory:
+
+```env
+DATABASE_URL=postgresql+psycopg2://appuser:apppass@localhost:5433/appdb
+SECRET_KEY=your-secret-key-change-in-production
+```
+
+#### 4. Run Database Migrations
+
+```bash
+# Database tables are created automatically on first run
+# Or manually with:
+alembic upgrade head
+```
+
+#### 5. Start the API Server
+
+```bash
+uvicorn main:app --reload
+```
+
+The API will be available at:
+- **API:** `http://127.0.0.1:8000`
+- **Interactive Docs:** `http://127.0.0.1:8000/docs`
+- **Health Check:** `http://127.0.0.1:8000/api/health`
 
 ### Frontend Setup
 
@@ -103,40 +148,146 @@ The API will be available at `http://127.0.0.1:8000`
 
 ## Development
 
-### Backend
+### Backend Architecture
 
-- FastAPI with automatic API documentation
-- SQLAlchemy ORM for database operations
-- JWT authentication with refresh tokens
-- SQLite database (can be switched to PostgreSQL)
+- **FastAPI** - Modern async web framework with automatic OpenAPI docs
+- **SQLAlchemy 2.0** - ORM with raw SQL support for complex spatial queries
+- **PostgreSQL + PostGIS** - Geospatial database for point-in-polygon queries
+- **JWT Authentication** - Secure access/refresh token system
+- **H3 Geospatial Library** - Hierarchical hexagonal grid indexing
+- **Pydantic v2** - Request/response validation and serialization
+- **SlowAPI** - Rate limiting for location ingestion endpoints
+- **Alembic** - Database migrations
 
-### Frontend
+### Frontend Stack
 
-- Expo Router for file-based routing
-- React Context for state management
-- Expo Secure Store for token storage
-- TypeScript for type safety
+- **Expo SDK 54** - React Native framework
+- **Expo Router** - File-based routing system
+- **Mapbox GL** - Interactive map rendering
+- **H3-js** - Client-side hexagonal grid calculations
+- **Expo Location** - GPS tracking and background location
+- **Expo Secure Store** - Encrypted token storage
+- **TypeScript** - Full type safety
 
 ## API Endpoints
 
 ### Authentication
 - `POST /api/auth/register` - Register a new user
-- `POST /api/auth/login` - Login user
-- `POST /api/auth/logout` - Logout user
-- `POST /api/auth/refresh` - Refresh access token
-- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/login` - Login and receive JWT tokens
+- `POST /api/auth/logout` - Invalidate refresh token
+- `POST /api/auth/refresh` - Get new access token
+- `GET /api/auth/me` - Get current user profile
+
+### Location Tracking
+- `POST /api/v1/location/ingest` - Upload visited H3 cells (rate limited: 120/min)
+  - Validates H3 cell matches GPS coordinates
+  - Performs reverse geocoding to country/region
+  - Returns newly discovered countries/regions
+
+### Map Data
+- `GET /api/v1/map/summary` - Get all visited countries and regions
+  - Returns ISO codes and names
+  - Used for fog-of-war rendering
+  
+- `GET /api/v1/map/cells` - Get H3 cells within viewport bounding box
+  - Query params: `min_lng`, `min_lat`, `max_lng`, `max_lat`
+  - Returns cells at resolution 6 and 8
+  - Bbox validation (max 180° longitude, 90° latitude span)
+
+### Statistics
+- `GET /api/v1/stats/countries` - Get country coverage statistics
+  - Coverage percentage (cells visited / total land cells)
+  - First and last visit timestamps
+  - Supports sorting, pagination
+  
+- `GET /api/v1/stats/regions` - Get state/province coverage statistics
+  - Coverage percentage per region
+  - Parent country information
+  - Supports sorting, pagination
 
 ### Health
-- `GET /api/health` - Health check
+- `GET /api/health` - Health check endpoint
 
 ## Environment Variables
 
 ### Backend
-- `DATABASE_URL` - Database connection string (default: `sqlite:///./trekkr.db`)
-- `SECRET_KEY` - JWT secret key (change in production!)
+- `DATABASE_URL` - PostgreSQL connection string (default: `postgresql+psycopg2://appuser:apppass@localhost:5433/appdb`)
+- `SECRET_KEY` - JWT secret key for token signing (required, change in production!)
+- `TEST_DATABASE_URL` - Test database URL (default: port 5434)
 
 ### Frontend
 - API base URL configured in `frontend/config/api.ts`
+- Mapbox token in `app.json`
+
+## Testing
+
+### Backend Tests
+
+The backend has comprehensive test coverage with 85+ integration tests:
+
+```bash
+cd backend
+
+# Start test database
+docker compose up -d db-test
+
+# Run all tests
+TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
+  python -m pytest tests/ -v
+
+# Run specific test file
+TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
+  python -m pytest tests/test_stats_service.py -v
+
+# Run with coverage
+TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
+  python -m pytest tests/ --cov=. --cov-report=html
+```
+
+**Test Coverage:**
+- ✅ Location ingestion and processing
+- ✅ Map endpoints and services
+- ✅ Statistics endpoints and services
+- ✅ Authentication and authorization
+- ✅ Rate limiting
+- ✅ H3 coordinate validation
+- ✅ Reverse geocoding
+- ✅ Discovery flow (first visits)
+
+## Database Schema
+
+### Core Tables
+- `users` - User accounts
+- `devices` - User devices for tracking
+- `regions_country` - Country geometries and metadata
+- `regions_state` - State/province geometries
+- `h3_cells` - Registry of visited H3 cells with geographic references
+- `user_cell_visits` - Per-user cell ownership and visit metadata
+- `ingest_batches` - Audit log of location uploads
+
+### Spatial Queries
+The app uses PostGIS for efficient spatial operations:
+- Point-in-polygon queries for reverse geocoding
+- Bounding box queries for viewport filtering
+- ST_Intersects for geographic containment
+
+## Docker Services
+
+The `docker-compose.yml` provides two PostgreSQL instances:
+
+```bash
+# Development database (port 5433)
+docker compose up -d db
+
+# Test database (port 5434)
+docker compose up -d db-test
+
+# View logs
+docker compose logs -f db
+
+# Stop services
+docker compose down
+```
 
 ## License
 
