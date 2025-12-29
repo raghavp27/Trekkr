@@ -23,7 +23,7 @@ class StatsService:
         """Get countries the user has visited with coverage statistics."""
         # Validate sort_by to prevent SQL injection
         valid_sort_fields = {
-            "coverage_pct": "coverage_pct",
+            "coverage_pct": "(COUNT(ucv.id)::float / COALESCE(c.land_cells_total_resolution8, 1))",
             "first_visited_at": "first_visited_at",
             "last_visited_at": "last_visited_at",
             "name": "c.name",
