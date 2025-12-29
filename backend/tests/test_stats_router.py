@@ -204,6 +204,11 @@ class TestStatsRegionsEndpoint:
 class TestStatsOverviewEndpoint:
     """Test GET /api/v1/stats/overview endpoint."""
 
+    def test_overview_requires_authentication(self, client: TestClient):
+        """Overview endpoint should require valid JWT token."""
+        response = client.get("/api/v1/stats/overview")
+        assert response.status_code == 401
+
     def test_overview_for_new_user_returns_zeros(
         self, client: TestClient, test_user: User
     ):
