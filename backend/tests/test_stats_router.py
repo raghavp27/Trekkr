@@ -235,3 +235,117 @@ class TestStatsOverviewEndpoint:
         # Recent lists should be empty
         assert data["recent_countries"] == []
         assert data["recent_regions"] == []
+
+    def test_overview_returns_correct_stats(
+        self,
+        client,
+        test_user,
+        db_session,
+        test_country_usa,
+        test_state_california,
+    ):
+        """User with visits should get accurate stats and recent lists."""
+        from datetime import datetime, timedelta
+
+        # Add some user visits at res6 and res8
+        now = datetime.utcnow()
+
+        # First, create h3_cells that we'll visit
+        # Visit 1: res8 cell
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 0)
+        """), {
+            "h3_index": "882830810ffffff",
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": -122.4,
+            "lat": 37.8,
+        })
+
+        # Visit 2: res6 cell
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, visit_count)
+            VALUES (:h3_index, 6, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 0)
+        """), {
+            "h3_index": "862830807ffffff",
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": -122.4,
+            "lat": 37.8,
+        })
+
+        # Visit 3: another res8 cell
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 0)
+        """), {
+            "h3_index": "882830811ffffff",
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": -122.4,
+            "lat": 37.8,
+        })
+
+        # Now create the user visits
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, :first_visited, :last_visited, 3)
+        """), {
+            "user_id": test_user.id,
+            "h3_index": "882830810ffffff",
+            "first_visited": now - timedelta(days=10),
+            "last_visited": now - timedelta(days=5),
+        })
+
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 6, :first_visited, :last_visited, 2)
+        """), {
+            "user_id": test_user.id,
+            "h3_index": "862830807ffffff",
+            "first_visited": now - timedelta(days=8),
+            "last_visited": now - timedelta(days=2),
+        })
+
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, :first_visited, :last_visited, 1)
+        """), {
+            "user_id": test_user.id,
+            "h3_index": "882830811ffffff",
+            "first_visited": now - timedelta(days=1),
+            "last_visited": now,
+        })
+
+        db_session.commit()
+
+        # Make request
+        token = create_jwt_token(test_user.id, test_user.username)
+        response = client.get(
+            "/api/v1/stats/overview",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify user info
+        assert data["user"]["id"] == test_user.id
+        assert data["user"]["username"] == test_user.username
+
+        # Verify stats (counts depend on h3_cells seed data)
+        assert data["stats"]["cells_visited_res6"] == 1
+        assert data["stats"]["cells_visited_res8"] == 2
+        assert data["stats"]["total_visit_count"] == 6  # 3 + 2 + 1
+
+        # Verify timestamps
+        assert data["stats"]["first_visit_at"] is not None
+        assert data["stats"]["last_visit_at"] is not None
+
+        # Recent lists should have at most 3 items each
+        assert len(data["recent_countries"]) <= 3
+        assert len(data["recent_regions"]) <= 3
