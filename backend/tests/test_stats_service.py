@@ -264,3 +264,57 @@ class TestStatsServiceRegions:
         assert region["country_name"] == "United States"
         assert region["coverage_pct"] == 0.002  # 1/500
         assert region["first_visited_at"] == datetime(2024, 3, 15, 10, 30)
+        assert region["last_visited_at"] == datetime(2024, 3, 15, 10, 30)
+
+    def test_only_counts_user_regions(
+        self,
+        db_session,
+        test_user: User,
+        test_user2: User,
+        test_country_usa: CountryRegion,
+        test_state_california: StateRegion,
+    ):
+        """Test that only the requesting user's cells are counted."""
+        db_session.execute(text("""
+            UPDATE regions_state SET land_cells_total_resolution8 = 1000 WHERE id = :id
+        """), {"id": test_state_california.id})
+
+        # User 1 has SF cell
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 1)
+        """), {
+            "h3_index": SAN_FRANCISCO["h3_res8"],
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": SAN_FRANCISCO["longitude"],
+            "lat": SAN_FRANCISCO["latitude"],
+        })
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, NOW(), NOW(), 1)
+        """), {"user_id": test_user.id, "h3_index": SAN_FRANCISCO["h3_res8"]})
+
+        # User 2 has LA cell (same state)
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 1)
+        """), {
+            "h3_index": LOS_ANGELES["h3_res8"],
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": LOS_ANGELES["longitude"],
+            "lat": LOS_ANGELES["latitude"],
+        })
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, NOW(), NOW(), 1)
+        """), {"user_id": test_user2.id, "h3_index": LOS_ANGELES["h3_res8"]})
+        db_session.commit()
+
+        # User 1 should only see 1 cell (0.1% coverage), not user 2's cell
+        service = StatsService(db_session, test_user.id)
+        result = service.get_regions()
+        assert result["regions"][0]["coverage_pct"] == 0.001  # 1/1000
