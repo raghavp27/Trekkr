@@ -218,7 +218,7 @@ class StatsService:
             FROM user_cell_visits ucv
             JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
             JOIN regions_country rc ON hc.country_id = rc.id
-            WHERE ucv.user_id = :user_id
+            WHERE ucv.user_id = :user_id AND ucv.res = 8
             GROUP BY rc.id, rc.iso2, rc.name
             ORDER BY visited_at DESC
             LIMIT 3
@@ -237,7 +237,7 @@ class StatsService:
             JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
             JOIN regions_state rs ON hc.state_id = rs.id
             JOIN regions_country rc ON rs.country_id = rc.id
-            WHERE ucv.user_id = :user_id
+            WHERE ucv.user_id = :user_id AND ucv.res = 8
             GROUP BY rs.id, rs.code, rs.name, rc.iso2, rc.name
             ORDER BY visited_at DESC
             LIMIT 3
