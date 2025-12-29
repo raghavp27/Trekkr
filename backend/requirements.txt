@@ -1,20 +1,20 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.3
-pydantic[email]==2.10.3
-sqlalchemy==2.0.36
-geoalchemy2==0.15.2
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-multipart==0.0.18
-alembic==1.13.3
-psycopg2-binary==2.9.10
+fastapi>=0.115.6
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.3
+pydantic[email]>=2.10.3
+sqlalchemy>=2.0.36
+geoalchemy2>=0.15.2
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.1
+python-multipart>=0.0.18
+alembic>=1.13.3
+psycopg2-binary>=2.9.10
 pycountry>=24.6.1
 geopandas>=0.14.0
 shapely>=2.0.0
 pyproj>=3.6.0
-h3==4.4.1  # H3 geospatial indexing for hexagonal grid cells
-slowapi==0.1.9
+h3>=4.4.1  # H3 geospatial indexing for hexagonal grid cells
+slowapi>=0.1.9
 pytest>=7.4.0
 pytest-cov>=4.1.0
