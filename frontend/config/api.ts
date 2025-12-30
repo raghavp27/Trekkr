@@ -30,5 +30,9 @@ export const API_ENDPOINTS = {
         REFRESH: "/api/auth/refresh",
         ME: "/api/auth/me",
     },
+    MAP: {
+        SUMMARY: "/api/v1/map/summary",
+        CELLS: "/api/v1/map/cells",
+    },
 } as const;
 

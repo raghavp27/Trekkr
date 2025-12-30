@@ -129,3 +129,64 @@ export async function getCurrentUser(
     );
 }
 
+// Map API Types
+export interface BoundingBox {
+    min_lng: number;
+    min_lat: number;
+    max_lng: number;
+    max_lat: number;
+}
+
+export interface MapCellsResponse {
+    res6: string[];
+    res8: string[];
+}
+
+export interface CountryInfo {
+    code: string;
+    name: string;
+}
+
+export interface RegionInfo {
+    code: string;
+    name: string;
+}
+
+export interface MapSummaryResponse {
+    countries: CountryInfo[];
+    regions: RegionInfo[];
+}
+
+// Map API Functions
+export async function getMapSummary(
+    accessToken: string
+): Promise<MapSummaryResponse> {
+    return authenticatedRequest<MapSummaryResponse>(
+        API_ENDPOINTS.MAP.SUMMARY,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+
+export async function getMapCells(
+    accessToken: string,
+    bbox: BoundingBox
+): Promise<MapCellsResponse> {
+    const params = new URLSearchParams({
+        min_lng: bbox.min_lng.toString(),
+        min_lat: bbox.min_lat.toString(),
+        max_lng: bbox.max_lng.toString(),
+        max_lat: bbox.max_lat.toString(),
+    });
+
+    return authenticatedRequest<MapCellsResponse>(
+        `${API_ENDPOINTS.MAP.CELLS}?${params.toString()}`,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+

@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { View, StyleSheet, ActivityIndicator, Text, Alert } from "react-native";
 import * as Location from "expo-location";
 import Mapbox, { MapView, Camera, LocationPuck } from "@rnmapbox/maps";
 import { MAPBOX_ACCESS_TOKEN } from "@/config/mapbox";
+// TODO: Re-enable after fixing h3-js encoding issue
+// import { FogOfWarLayer } from "@/components/map/FogOfWarLayer";
+import { getMapCells, BoundingBox } from "@/services/api";
+import { tokenStorage } from "@/services/storage";
 
 // Initialize Mapbox with access token
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -12,10 +16,22 @@ interface UserCoordinates {
     longitude: number;
 }
 
+interface MapBounds {
+    ne: [number, number]; // [lng, lat]
+    sw: [number, number]; // [lng, lat]
+}
+
+const ZOOM_THRESHOLD = 8; // Show res8 cells at zoom >= 8, otherwise res6
+const DEBOUNCE_MS = 300;
+const MIN_ZOOM_FOR_CELLS = 4; // Don't fetch cells when zoomed out too far
+
 export default function MapScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
     const [userLocation, setUserLocation] = useState<UserCoordinates | null>(null);
+    const [revealedCells, setRevealedCells] = useState<string[]>([]);
+
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         requestLocationPermission();
@@ -50,6 +66,62 @@ export default function MapScreen() {
         }
     };
 
+    const fetchCellsForViewport = useCallback(async (bounds: MapBounds, zoom: number) => {
+        // Skip fetching when zoomed out too far (viewport too large)
+        if (zoom < MIN_ZOOM_FOR_CELLS) {
+            setRevealedCells([]);
+            return;
+        }
+
+        try {
+            const accessToken = await tokenStorage.getAccessToken();
+            if (!accessToken) {
+                return;
+            }
+
+            const bbox: BoundingBox = {
+                min_lng: bounds.sw[0],
+                min_lat: bounds.sw[1],
+                max_lng: bounds.ne[0],
+                max_lat: bounds.ne[1],
+            };
+
+            const response = await getMapCells(accessToken, bbox);
+
+            // Use res8 at high zoom, res6 at low zoom
+            const cells = zoom >= ZOOM_THRESHOLD
+                ? [...response.res6, ...response.res8]
+                : response.res6;
+
+            setRevealedCells(cells);
+        } catch (error) {
+            // Silently fail - fog of war is optional, map still works without it
+            // This can fail if backend is not running or user has no visited cells
+        }
+    }, []);
+
+    const handleCameraChanged = useCallback((state: { properties: { bounds: MapBounds; zoom: number } }) => {
+        const { bounds, zoom } = state.properties;
+
+        // Debounce API calls
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        debounceTimerRef.current = setTimeout(() => {
+            fetchCellsForViewport(bounds, zoom);
+        }, DEBOUNCE_MS);
+    }, [fetchCellsForViewport]);
+
+    // Cleanup debounce timer on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, []);
+
     if (isLoading) {
         return (
             <View style={styles.centered}>
@@ -83,6 +155,7 @@ export default function MapScreen() {
                 attributionEnabled={true}
                 attributionPosition={{ bottom: 8, right: 8 }}
                 scaleBarEnabled={false}
+                onCameraChanged={handleCameraChanged}
             >
                 <Camera
                     zoomLevel={initialZoom}
@@ -90,6 +163,9 @@ export default function MapScreen() {
                     animationMode="flyTo"
                     animationDuration={1000}
                 />
+
+                {/* TODO: Re-enable after fixing h3-js encoding issue */}
+                {/* <FogOfWarLayer revealedCells={revealedCells} /> */}
 
                 {locationPermission && (
                     <LocationPuck
