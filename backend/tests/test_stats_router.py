@@ -366,11 +366,12 @@ class TestStatsOverviewEndpoint:
 
         # Create Mexico country and state
         country_mexico = db_session.execute(text("""
-            INSERT INTO regions_country (name, iso2, iso3, geom, created_at, updated_at)
+            INSERT INTO regions_country (name, iso2, iso3, continent, geom, created_at, updated_at)
             VALUES (
                 'Mexico',
                 'MX',
                 'MEX',
+                'North America',
                 ST_GeomFromText('POLYGON((-115 15, -115 30, -90 30, -90 15, -115 15))', 4326),
                 CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP
@@ -393,11 +394,12 @@ class TestStatsOverviewEndpoint:
 
         # Create Canada country and state
         country_canada = db_session.execute(text("""
-            INSERT INTO regions_country (name, iso2, iso3, geom, created_at, updated_at)
+            INSERT INTO regions_country (name, iso2, iso3, continent, geom, created_at, updated_at)
             VALUES (
                 'Canada',
                 'CA',
                 'CAN',
+                'North America',
                 ST_GeomFromText('POLYGON((-140 45, -140 70, -60 70, -60 45, -140 45))', 4326),
                 CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP

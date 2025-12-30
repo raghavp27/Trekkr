@@ -161,11 +161,12 @@ def test_country_usa(db_session: Session) -> CountryRegion:
     """Create USA country record for integration tests."""
     # Simple polygon covering San Francisco area
     country = db_session.execute(text("""
-        INSERT INTO regions_country (name, iso2, iso3, geom, created_at, updated_at)
+        INSERT INTO regions_country (name, iso2, iso3, continent, geom, created_at, updated_at)
         VALUES (
             'United States',
             'US',
             'USA',
+            'North America',
             ST_GeomFromText('POLYGON((-125 30, -125 50, -115 50, -115 30, -125 30))', 4326),
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP
@@ -213,11 +214,12 @@ def test_state_california(db_session: Session, test_country_usa: CountryRegion) 
 def test_country_japan(db_session: Session) -> CountryRegion:
     """Create Japan country record for integration tests."""
     country = db_session.execute(text("""
-        INSERT INTO regions_country (name, iso2, iso3, geom, created_at, updated_at)
+        INSERT INTO regions_country (name, iso2, iso3, continent, geom, created_at, updated_at)
         VALUES (
             'Japan',
             'JP',
             'JPN',
+            'Asia',
             ST_GeomFromText('POLYGON((135 30, 135 40, 145 40, 145 30, 135 30))', 4326),
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP
