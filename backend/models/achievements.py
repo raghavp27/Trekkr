@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from database import Base
 
@@ -49,6 +49,6 @@ class UserAchievement(Base):
     )
     unlocked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    user = relationship("User", backref="achievements")
+    user = relationship("User", backref=backref("achievements", passive_deletes=True))
     achievement = relationship("Achievement", back_populates="user_unlocks")
 

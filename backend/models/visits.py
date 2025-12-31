@@ -12,7 +12,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from database import Base
 
@@ -55,7 +55,7 @@ class UserCellVisit(Base):
     visit_count = Column(Integer, default=1, nullable=False)
 
     cell = relationship("H3Cell", back_populates="user_visits")
-    user = relationship("User", backref="cell_visits")
+    user = relationship("User", backref=backref("cell_visits", passive_deletes=True))
     device = relationship("Device", backref="cell_visits")
 
 
@@ -82,6 +82,6 @@ class IngestBatch(Base):
     res_min = Column(SmallInteger, nullable=True)
     res_max = Column(SmallInteger, nullable=True)
 
-    user = relationship("User", backref="ingest_batches")
+    user = relationship("User", backref=backref("ingest_batches", passive_deletes=True))
     device = relationship("Device", backref="ingest_batches")
 
