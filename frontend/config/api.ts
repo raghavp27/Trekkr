@@ -33,6 +33,11 @@ export const API_ENDPOINTS = {
     MAP: {
         SUMMARY: "/api/v1/map/summary",
         CELLS: "/api/v1/map/cells",
+        POLYGONS: "/api/v1/map/polygons",
+    },
+    LOCATION: {
+        INGEST: "/api/v1/location/ingest",
+        INGEST_SIMPLE: "/api/v1/location/ingest/simple",
     },
 } as const;
 

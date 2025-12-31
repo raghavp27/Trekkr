@@ -13,12 +13,18 @@ from models.visits import IngestBatch, UserCellVisit
 from services.achievement_service import AchievementService
 
 
+def _is_sqlite(db: Session) -> bool:
+    """Check if the database is SQLite."""
+    return "sqlite" in str(db.bind.url) if db.bind else False
+
+
 class LocationProcessor:
     """Processes location updates and tracks cell visits."""
 
     def __init__(self, db: Session, user_id: int):
         self.db = db
         self.user_id = user_id
+        self._is_sqlite = _is_sqlite(db)
 
     def _ensure_device(
         self,
@@ -131,6 +137,10 @@ class LocationProcessor:
         self, latitude: float, longitude: float
     ) -> Tuple[Optional[int], Optional[int]]:
         """Find country and state containing the given point using PostGIS."""
+        # SQLite doesn't support PostGIS, skip reverse geocoding in dev mode
+        if self._is_sqlite:
+            return None, None
+
         query = text("""
             WITH point AS (
                 SELECT ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) AS geom
@@ -164,7 +174,12 @@ class LocationProcessor:
     ) -> dict:
         """Upsert H3Cell and UserCellVisit records, return insert/update status."""
 
-        # Upsert H3Cell (global registry)
+        if self._is_sqlite:
+            return self._upsert_cell_visit_sqlite(
+                h3_index, res, latitude, longitude, country_id, state_id, device_id
+            )
+
+        # PostgreSQL version with PostGIS
         h3_cell_query = text("""
             INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid,
                                   first_visited_at, last_visited_at, visit_count)
@@ -214,6 +229,79 @@ class LocationProcessor:
             "res": result.res,
             "visit_count": result.visit_count,
             "is_new": result.was_inserted,
+        }
+
+    def _upsert_cell_visit_sqlite(
+        self,
+        h3_index: str,
+        res: int,
+        latitude: float,
+        longitude: float,
+        country_id: Optional[int],
+        state_id: Optional[int],
+        device_id: Optional[int],
+    ) -> dict:
+        """SQLite-compatible upsert for H3Cell and UserCellVisit."""
+        now = datetime.utcnow()
+
+        # Check if H3Cell exists
+        existing_cell = self.db.query(H3Cell).filter(H3Cell.h3_index == h3_index).first()
+
+        if existing_cell:
+            existing_cell.last_visited_at = now
+            existing_cell.visit_count += 1
+            if country_id and not existing_cell.country_id:
+                existing_cell.country_id = country_id
+            if state_id and not existing_cell.state_id:
+                existing_cell.state_id = state_id
+        else:
+            new_cell = H3Cell(
+                h3_index=h3_index,
+                res=res,
+                country_id=country_id,
+                state_id=state_id,
+                first_visited_at=now,
+                last_visited_at=now,
+                visit_count=1,
+            )
+            self.db.add(new_cell)
+
+        self.db.flush()
+
+        # Check if UserCellVisit exists
+        existing_visit = self.db.query(UserCellVisit).filter(
+            UserCellVisit.user_id == self.user_id,
+            UserCellVisit.h3_index == h3_index,
+        ).first()
+
+        is_new = existing_visit is None
+
+        if existing_visit:
+            existing_visit.last_visited_at = now
+            existing_visit.visit_count += 1
+            if device_id:
+                existing_visit.device_id = device_id
+            visit_count = existing_visit.visit_count
+        else:
+            new_visit = UserCellVisit(
+                user_id=self.user_id,
+                device_id=device_id,
+                h3_index=h3_index,
+                res=res,
+                first_visited_at=now,
+                last_visited_at=now,
+                visit_count=1,
+            )
+            self.db.add(new_visit)
+            visit_count = 1
+
+        self.db.flush()
+
+        return {
+            "h3_index": h3_index,
+            "res": res,
+            "visit_count": visit_count,
+            "is_new": is_new,
         }
 
     def _record_ingest_batch(self, device_id: Optional[int]) -> None:

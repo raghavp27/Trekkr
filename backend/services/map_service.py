@@ -2,8 +2,14 @@
 
 from typing import Optional
 
+import h3
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+
+def _is_sqlite(db: Session) -> bool:
+    """Check if the database is SQLite."""
+    return "sqlite" in str(db.bind.url) if db.bind else False
 
 
 class MapService:
@@ -12,6 +18,7 @@ class MapService:
     def __init__(self, db: Session, user_id: int):
         self.db = db
         self.user_id = user_id
+        self._is_sqlite = _is_sqlite(db)
 
     def get_summary(self) -> dict:
         """Get all countries and regions the user has visited.
@@ -38,17 +45,31 @@ class MapService:
         ]
 
         # Query distinct regions
-        regions_query = text("""
-            SELECT DISTINCT
-                CONCAT(rc.iso2, '-', rs.code) AS code,
-                rs.name
-            FROM user_cell_visits ucv
-            JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-            JOIN regions_state rs ON hc.state_id = rs.id
-            JOIN regions_country rc ON rs.country_id = rc.id
-            WHERE ucv.user_id = :user_id
-            ORDER BY rs.name
-        """)
+        # SQLite uses || for string concatenation, PostgreSQL uses CONCAT
+        if self._is_sqlite:
+            regions_query = text("""
+                SELECT DISTINCT
+                    rc.iso2 || '-' || rs.code AS code,
+                    rs.name
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                JOIN regions_state rs ON hc.state_id = rs.id
+                JOIN regions_country rc ON rs.country_id = rc.id
+                WHERE ucv.user_id = :user_id
+                ORDER BY rs.name
+            """)
+        else:
+            regions_query = text("""
+                SELECT DISTINCT
+                    CONCAT(rc.iso2, '-', rs.code) AS code,
+                    rs.name
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                JOIN regions_state rs ON hc.state_id = rs.id
+                JOIN regions_country rc ON rs.country_id = rc.id
+                WHERE ucv.user_id = :user_id
+                ORDER BY rs.name
+            """)
         regions_result = self.db.execute(
             regions_query, {"user_id": self.user_id}
         ).fetchall()
@@ -80,26 +101,37 @@ class MapService:
         Returns:
             dict with 'res6' and 'res8' lists of H3 index strings
         """
-        query = text("""
-            SELECT hc.h3_index, hc.res
-            FROM user_cell_visits ucv
-            JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-            WHERE ucv.user_id = :user_id
-              AND hc.res IN (6, 8)
-              AND ST_Intersects(
-                  hc.centroid::geometry,
-                  ST_MakeEnvelope(:min_lng, :min_lat, :max_lng, :max_lat, 4326)
-              )
-            ORDER BY hc.h3_index
-        """)
-
-        result = self.db.execute(query, {
-            "user_id": self.user_id,
-            "min_lng": min_lng,
-            "min_lat": min_lat,
-            "max_lng": max_lng,
-            "max_lat": max_lat,
-        }).fetchall()
+        # SQLite doesn't have PostGIS, so we return all cells and filter client-side
+        if self._is_sqlite:
+            query = text("""
+                SELECT hc.h3_index, hc.res
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                WHERE ucv.user_id = :user_id
+                  AND hc.res IN (6, 8)
+                ORDER BY hc.h3_index
+            """)
+            result = self.db.execute(query, {"user_id": self.user_id}).fetchall()
+        else:
+            query = text("""
+                SELECT hc.h3_index, hc.res
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                WHERE ucv.user_id = :user_id
+                  AND hc.res IN (6, 8)
+                  AND ST_Intersects(
+                      hc.centroid::geometry,
+                      ST_MakeEnvelope(:min_lng, :min_lat, :max_lng, :max_lat, 4326)
+                  )
+                ORDER BY hc.h3_index
+            """)
+            result = self.db.execute(query, {
+                "user_id": self.user_id,
+                "min_lng": min_lng,
+                "min_lat": min_lat,
+                "max_lng": max_lng,
+                "max_lat": max_lat,
+            }).fetchall()
 
         res6, res8 = [], []
         for row in result:
@@ -109,3 +141,93 @@ class MapService:
                 res8.append(row.h3_index)
 
         return {"res6": res6, "res8": res8}
+
+    def get_polygons_in_viewport(
+        self,
+        min_lng: float,
+        min_lat: float,
+        max_lng: float,
+        max_lat: float,
+        zoom: Optional[float] = None,
+    ) -> dict:
+        """Get H3 cells as GeoJSON polygons within the bounding box.
+
+        Args:
+            min_lng: Western longitude bound
+            min_lat: Southern latitude bound
+            max_lng: Eastern longitude bound
+            max_lat: Northern latitude bound
+            zoom: Current map zoom level (determines which resolution to return)
+
+        Returns:
+            GeoJSON FeatureCollection with polygon features for each H3 cell
+        """
+        # Determine which resolution to show based on zoom level
+        # zoom < 10: show res-6 (larger hexagons, ~3.2km)
+        # zoom >= 10: show res-8 (smaller hexagons, ~460m)
+        if zoom is not None and zoom < 10:
+            target_res = 6
+        else:
+            target_res = 8
+
+        # SQLite doesn't have PostGIS, so we return all cells
+        if self._is_sqlite:
+            query = text("""
+                SELECT hc.h3_index, hc.res
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                WHERE ucv.user_id = :user_id
+                  AND hc.res = :target_res
+                ORDER BY hc.h3_index
+            """)
+            result = self.db.execute(query, {
+                "user_id": self.user_id,
+                "target_res": target_res,
+            }).fetchall()
+        else:
+            query = text("""
+                SELECT hc.h3_index, hc.res
+                FROM user_cell_visits ucv
+                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                WHERE ucv.user_id = :user_id
+                  AND hc.res = :target_res
+                  AND ST_Intersects(
+                      hc.centroid::geometry,
+                      ST_MakeEnvelope(:min_lng, :min_lat, :max_lng, :max_lat, 4326)
+                  )
+                ORDER BY hc.h3_index
+            """)
+            result = self.db.execute(query, {
+                "user_id": self.user_id,
+                "target_res": target_res,
+                "min_lng": min_lng,
+                "min_lat": min_lat,
+                "max_lng": max_lng,
+                "max_lat": max_lat,
+            }).fetchall()
+
+        features = []
+        for row in result:
+            # Get H3 cell boundary as list of [lat, lng] pairs
+            boundary = h3.cell_to_boundary(row.h3_index)
+            # Convert to GeoJSON format [lng, lat] and close the polygon
+            coords = [[lng, lat] for lat, lng in boundary]
+            coords.append(coords[0])  # Close the polygon ring
+
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "h3_index": row.h3_index,
+                    "resolution": row.res,
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [coords],
+                },
+            }
+            features.append(feature)
+
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+        }

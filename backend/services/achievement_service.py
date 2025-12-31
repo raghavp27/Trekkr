@@ -9,12 +9,18 @@ from sqlalchemy.orm import Session
 from models.achievements import Achievement, UserAchievement
 
 
+def _is_sqlite(db: Session) -> bool:
+    """Check if the database is SQLite."""
+    return "sqlite" in str(db.bind.url) if db.bind else False
+
+
 class AchievementService:
     """Service for evaluating and unlocking user achievements."""
 
     def __init__(self, db: Session, user_id: int):
         self.db = db
         self.user_id = user_id
+        self._is_sqlite = _is_sqlite(db)
 
     def check_and_unlock(self) -> List[Achievement]:
         """Check all achievements and unlock newly earned ones.
@@ -116,22 +122,26 @@ class AchievementService:
         stats["max_regions_in_country"] = result.max_regions if result and result.max_regions else 0
 
         # Hemispheres visited (based on cell centroid latitude)
-        result = self.db.execute(text("""
-            SELECT
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM user_cell_visits ucv
-                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-                    WHERE ucv.user_id = :user_id AND ucv.res = 8
-                      AND ST_Y(hc.centroid) >= 0
-                ) THEN 1 ELSE 0 END as northern,
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM user_cell_visits ucv
-                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-                    WHERE ucv.user_id = :user_id AND ucv.res = 8
-                      AND ST_Y(hc.centroid) < 0
-                ) THEN 1 ELSE 0 END as southern
-        """), {"user_id": self.user_id}).fetchone()
-        stats["hemispheres"] = (result.northern if result else 0) + (result.southern if result else 0)
+        # SQLite doesn't have PostGIS, so we skip hemisphere calculation in dev
+        if self._is_sqlite:
+            stats["hemispheres"] = 0
+        else:
+            result = self.db.execute(text("""
+                SELECT
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM user_cell_visits ucv
+                        JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                        WHERE ucv.user_id = :user_id AND ucv.res = 8
+                          AND ST_Y(hc.centroid) >= 0
+                    ) THEN 1 ELSE 0 END as northern,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM user_cell_visits ucv
+                        JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                        WHERE ucv.user_id = :user_id AND ucv.res = 8
+                          AND ST_Y(hc.centroid) < 0
+                    ) THEN 1 ELSE 0 END as southern
+            """), {"user_id": self.user_id}).fetchone()
+            stats["hemispheres"] = (result.northern if result else 0) + (result.southern if result else 0)
 
         # Unique days visited
         result = self.db.execute(text("""
@@ -142,39 +152,74 @@ class AchievementService:
         stats["unique_days"] = result.unique_days if result else 0
 
         # Max country coverage percentage
-        result = self.db.execute(text("""
-            SELECT MAX(coverage) as max_coverage
-            FROM (
-                SELECT
-                    hc.country_id,
-                    COUNT(DISTINCT ucv.h3_index)::float / NULLIF(rc.land_cells_total_resolution8, 0) as coverage
-                FROM user_cell_visits ucv
-                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-                JOIN regions_country rc ON hc.country_id = rc.id
-                WHERE ucv.user_id = :user_id AND ucv.res = 8
-                  AND hc.country_id IS NOT NULL
-                  AND rc.land_cells_total_resolution8 > 0
-                GROUP BY hc.country_id, rc.land_cells_total_resolution8
-            ) sub
-        """), {"user_id": self.user_id}).fetchone()
+        # SQLite uses CAST(... AS REAL), PostgreSQL uses ::float
+        if self._is_sqlite:
+            result = self.db.execute(text("""
+                SELECT MAX(coverage) as max_coverage
+                FROM (
+                    SELECT
+                        hc.country_id,
+                        CAST(COUNT(DISTINCT ucv.h3_index) AS REAL) / NULLIF(rc.land_cells_total_resolution8, 0) as coverage
+                    FROM user_cell_visits ucv
+                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                    JOIN regions_country rc ON hc.country_id = rc.id
+                    WHERE ucv.user_id = :user_id AND ucv.res = 8
+                      AND hc.country_id IS NOT NULL
+                      AND rc.land_cells_total_resolution8 > 0
+                    GROUP BY hc.country_id, rc.land_cells_total_resolution8
+                ) sub
+            """), {"user_id": self.user_id}).fetchone()
+        else:
+            result = self.db.execute(text("""
+                SELECT MAX(coverage) as max_coverage
+                FROM (
+                    SELECT
+                        hc.country_id,
+                        COUNT(DISTINCT ucv.h3_index)::float / NULLIF(rc.land_cells_total_resolution8, 0) as coverage
+                    FROM user_cell_visits ucv
+                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                    JOIN regions_country rc ON hc.country_id = rc.id
+                    WHERE ucv.user_id = :user_id AND ucv.res = 8
+                      AND hc.country_id IS NOT NULL
+                      AND rc.land_cells_total_resolution8 > 0
+                    GROUP BY hc.country_id, rc.land_cells_total_resolution8
+                ) sub
+            """), {"user_id": self.user_id}).fetchone()
         stats["max_country_coverage"] = result.max_coverage if result and result.max_coverage else 0.0
 
         # Max region coverage percentage
-        result = self.db.execute(text("""
-            SELECT MAX(coverage) as max_coverage
-            FROM (
-                SELECT
-                    hc.state_id,
-                    COUNT(DISTINCT ucv.h3_index)::float / NULLIF(rs.land_cells_total_resolution8, 0) as coverage
-                FROM user_cell_visits ucv
-                JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
-                JOIN regions_state rs ON hc.state_id = rs.id
-                WHERE ucv.user_id = :user_id AND ucv.res = 8
-                  AND hc.state_id IS NOT NULL
-                  AND rs.land_cells_total_resolution8 > 0
-                GROUP BY hc.state_id, rs.land_cells_total_resolution8
-            ) sub
-        """), {"user_id": self.user_id}).fetchone()
+        if self._is_sqlite:
+            result = self.db.execute(text("""
+                SELECT MAX(coverage) as max_coverage
+                FROM (
+                    SELECT
+                        hc.state_id,
+                        CAST(COUNT(DISTINCT ucv.h3_index) AS REAL) / NULLIF(rs.land_cells_total_resolution8, 0) as coverage
+                    FROM user_cell_visits ucv
+                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                    JOIN regions_state rs ON hc.state_id = rs.id
+                    WHERE ucv.user_id = :user_id AND ucv.res = 8
+                      AND hc.state_id IS NOT NULL
+                      AND rs.land_cells_total_resolution8 > 0
+                    GROUP BY hc.state_id, rs.land_cells_total_resolution8
+                ) sub
+            """), {"user_id": self.user_id}).fetchone()
+        else:
+            result = self.db.execute(text("""
+                SELECT MAX(coverage) as max_coverage
+                FROM (
+                    SELECT
+                        hc.state_id,
+                        COUNT(DISTINCT ucv.h3_index)::float / NULLIF(rs.land_cells_total_resolution8, 0) as coverage
+                    FROM user_cell_visits ucv
+                    JOIN h3_cells hc ON ucv.h3_index = hc.h3_index
+                    JOIN regions_state rs ON hc.state_id = rs.id
+                    WHERE ucv.user_id = :user_id AND ucv.res = 8
+                      AND hc.state_id IS NOT NULL
+                      AND rs.land_cells_total_resolution8 > 0
+                    GROUP BY hc.state_id, rs.land_cells_total_resolution8
+                ) sub
+            """), {"user_id": self.user_id}).fetchone()
         stats["max_region_coverage"] = result.max_coverage if result and result.max_coverage else 0.0
 
         return stats
