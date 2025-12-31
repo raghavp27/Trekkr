@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models.device import Device
 from models.user import User
+from routers.location import limiter
 from schemas.auth import (
+    ChangePasswordRequest,
     DeviceResponse,
     DeviceUpdateRequest,
+    ForgotPasswordRequest,
     MessageResponse,
+    ResetPasswordRequest,
     TokenRefresh,
     TokenResponse,
     UserRegister,
@@ -21,6 +25,7 @@ from services.auth import (
     hash_password,
     verify_password,
 )
+from services.password_service import PasswordService
 
 router = APIRouter()
 
@@ -158,6 +163,105 @@ def get_me(current_user: User = Depends(get_current_user)):
     Raises: 401 if not authenticated or token invalid
     """
     return current_user
+
+
+@router.post("/change-password", response_model=MessageResponse)
+@limiter.limit("10/minute")
+def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Change password for the authenticated user.
+
+    Requires: Authorization header with Bearer token
+    Body: current_password, new_password
+    Returns: success message
+    Raises: 401 if current password is wrong, 422 if new password invalid
+
+    Note: All existing sessions will be invalidated after password change.
+
+    Rate limit: 10 requests per minute per user.
+    """
+    # Store user_id in request state for rate limiting
+    request.state.user_id = current_user.id
+
+    password_service = PasswordService(db)
+    success = password_service.change_password(
+        user=current_user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    return {"message": "Password changed successfully. Please log in again."}
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Request a password reset email.
+
+    Body: email
+    Returns: success message (always, to prevent email enumeration)
+
+    If the email exists, a password reset link will be sent.
+
+    Rate limit: 5 requests per minute per IP/user.
+    """
+    password_service = PasswordService(db)
+    password_service.request_password_reset(payload.email)
+
+    return {
+        "message": (
+            "If an account with that email exists, a password reset link has been sent."
+        )
+    }
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset password using a token from email.
+
+    Body: token, new_password
+    Returns: success message
+    Raises: 400 if token invalid/expired/used, 422 if new password invalid
+
+    Rate limit: 5 requests per minute per IP/user.
+    """
+    password_service = PasswordService(db)
+    success = password_service.reset_password(
+        raw_token=payload.token,
+        new_password=payload.new_password,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid, expired, or already used reset token",
+        )
+
+    return {
+        "message": "Password reset successfully. Please log in with your new password."
+    }
 
 
 @router.patch("/device", response_model=DeviceResponse)

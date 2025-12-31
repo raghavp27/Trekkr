@@ -97,14 +97,27 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Validate token version (session invalidation check)
+    token_version = payload.get("token_ver")
+    if token_version is None or token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalidated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
 def create_tokens(user: User) -> dict:
     """Create both access and refresh tokens for a user."""
     # JWT 'sub' claim must be a string
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    access_token = create_access_token(
+        data={"sub": str(user.id), "token_ver": user.token_version}
+    )
+    refresh_token = create_refresh_token(
+        data={"sub": str(user.id), "token_ver": user.token_version}
+    )
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

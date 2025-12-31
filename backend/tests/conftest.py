@@ -277,6 +277,7 @@ def valid_jwt_token(test_user: User) -> str:
         "username": test_user.username,
         "exp": datetime.utcnow() + timedelta(hours=1),
         "type": "access",  # Required by get_current_user
+        "token_ver": getattr(test_user, "token_version", 1),
     }
     return jwt.encode(payload, "test-secret-key", algorithm="HS256")
 
@@ -324,13 +325,20 @@ def client(db_session: Session) -> TestClient:
 # Helper Functions
 # ============================================================================
 
-def create_jwt_token(user_id: int, username: str, secret_key: str = "test-secret-key") -> str:
+def create_jwt_token(
+    user_id: int,
+    username: str,
+    *,
+    token_ver: int = 1,
+    secret_key: str = "test-secret-key",
+) -> str:
     """Helper to create JWT tokens for authentication tests."""
     payload = {
         "sub": str(user_id),
         "username": username,
         "exp": datetime.utcnow() + timedelta(hours=1),
         "type": "access",  # Required by get_current_user
+        "token_ver": token_ver,
     }
     return jwt.encode(payload, secret_key, algorithm="HS256")
 

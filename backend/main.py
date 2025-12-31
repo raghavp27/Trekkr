@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from config import validate_config
 from database import init_db
 from routers import auth, health, location, map, stats, achievements
 from routers.location import limiter
@@ -14,6 +15,7 @@ from routers.location import limiter
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup: Initialize the database
+    validate_config()
     init_db()
     yield
     # Shutdown: Cleanup if needed
