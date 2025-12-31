@@ -183,6 +183,7 @@ The API will be available at:
 - `POST /api/auth/forgot-password` - Request password reset email
 - `POST /api/auth/reset-password` - Reset password with email token
 - `PATCH /api/auth/device` - Update device metadata (single device per user)
+- `DELETE /api/auth/account` - Delete account
 
 ### Location Tracking
 - `POST /api/v1/location/ingest` - Upload visited H3 cells (rate limited: 120/min)
@@ -243,15 +244,15 @@ docker compose up -d db-test
 
 # Run all tests
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/ -v
+  python3 -m pytest tests/ -v
 
 # Run specific test file
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/test_stats_service.py -v
+  python3 -m pytest tests/test_stats_service.py -v
 
 # Run with coverage
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/ --cov=. --cov-report=html
+  python3 -m pytest tests/ --cov=. --cov-report=html
 ```
 
 **Test Coverage:**
