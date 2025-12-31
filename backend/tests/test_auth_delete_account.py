@@ -251,3 +251,46 @@ def test_delete_account_cascades_to_user_achievements(client, test_user, auth_he
 
     # Verify achievement definition still exists (global catalog)
     assert db_session.query(Achievement).filter(Achievement.id == achievement.id).count() == 1
+
+
+def test_delete_account_preserves_h3_cells(client, test_user, auth_headers, db_session):
+    """Test that deleting user does NOT delete global H3 cells."""
+    # Create H3 cell
+    h3_cell = H3Cell(
+        h3_index="882830810ffffff",
+        res=8,
+        centroid="POINT(-122.4194 37.7749)"
+    )
+    db_session.add(h3_cell)
+    db_session.flush()
+
+    # Create user visit to that cell
+    visit = UserCellVisit(
+        user_id=test_user.id,
+        h3_index="882830810ffffff",
+        res=8
+    )
+    db_session.add(visit)
+    db_session.commit()
+
+    # Verify both cell and visit exist
+    assert db_session.query(H3Cell).filter(H3Cell.h3_index == "882830810ffffff").count() == 1
+    assert db_session.query(UserCellVisit).filter(UserCellVisit.user_id == test_user.id).count() == 1
+
+    # Expire session to let database CASCADE handle deletion
+    db_session.expire_all()
+
+    # Delete account
+    response = client.request(
+        "DELETE",
+        "/api/auth/account",
+        content=json.dumps({"password": "TestPass123", "confirmation": "DELETE"}),
+        headers={**auth_headers, "Content-Type": "application/json"},
+    )
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    # Verify H3 cell still exists (global registry)
+    assert db_session.query(H3Cell).filter(H3Cell.h3_index == "882830810ffffff").count() == 1
+
+    # But user visit is gone
+    assert db_session.query(UserCellVisit).filter(UserCellVisit.user_id == test_user.id).count() == 0
