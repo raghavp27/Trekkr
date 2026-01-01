@@ -1,6 +1,7 @@
 """Email service for sending transactional emails via SendGrid."""
 
 import logging
+from html import escape
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -62,15 +63,22 @@ class EmailService:
             return False
 
     def _build_reset_email_html(self, *, username: str, reset_url: str) -> str:
-        """Build HTML content for password reset email."""
+        """Build HTML content for password reset email.
+        
+        Note: Escapes user input to prevent XSS attacks in email clients.
+        """
+        # Escape user input to prevent XSS
+        safe_username = escape(username)
+        safe_reset_url = escape(reset_url)
+        
         return f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Reset Your Password</h2>
-            <p>Hi {username},</p>
+            <p>Hi {safe_username},</p>
             <p>We received a request to reset your password for your {self.app_name} account.</p>
             <p>Click the button below to reset your password. This link expires in 1 hour.</p>
             <p style="margin: 30px 0;">
-                <a href="{reset_url}"
+                <a href="{safe_reset_url}"
                    style="background-color: #4CAF50; color: white; padding: 12px 24px;
                           text-decoration: none; border-radius: 4px;">
                     Reset Password

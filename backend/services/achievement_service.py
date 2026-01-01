@@ -1,6 +1,6 @@
 """Achievement service for checking and unlocking achievements."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy import text
@@ -49,7 +49,7 @@ class AchievementService:
                 user_achievement = UserAchievement(
                     user_id=self.user_id,
                     achievement_id=achievement.id,
-                    unlocked_at=datetime.utcnow(),
+                    unlocked_at=datetime.now(timezone.utc),
                 )
                 self.db.add(user_achievement)
                 newly_unlocked.append(achievement)

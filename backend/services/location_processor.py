@@ -1,6 +1,6 @@
 """Location processing service for H3 cell tracking."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 import h3
@@ -90,7 +90,7 @@ class LocationProcessor:
                 "longitude": loc.longitude,
                 "h3_res8": loc.h3_res8,
                 "h3_res6": h3_res6,
-                "timestamp": loc.timestamp or datetime.utcnow(),
+                "timestamp": loc.timestamp or datetime.now(timezone.utc),
             })
 
         return valid, skipped
@@ -412,7 +412,7 @@ class LocationProcessor:
 
         Returns discovery summary with new vs. revisited entities.
         """
-        timestamp = timestamp or datetime.utcnow()
+        timestamp = timestamp or datetime.now(timezone.utc)
 
         # Ensure device exists (auto-create if first time)
         device_id = self._ensure_device(device_uuid, device_name, platform)

@@ -151,6 +151,15 @@ def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
             detail="User not found",
         )
 
+    # Validate token version (session invalidation check)
+    token_version = payload.get("token_ver")
+    if token_version is None or token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalidated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Return new tokens
     return create_tokens(user)
 

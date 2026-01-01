@@ -1,6 +1,6 @@
 """Per-user visits and ingestion audit records."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -43,13 +43,14 @@ class UserCellVisit(Base):
         String(25),
         ForeignKey("h3_cells.h3_index", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # Added explicit index for FK lookups
     )
     res = Column(SmallInteger, nullable=False, index=True)
-    first_visited_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    first_visited_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     last_visited_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
     visit_count = Column(Integer, default=1, nullable=False)

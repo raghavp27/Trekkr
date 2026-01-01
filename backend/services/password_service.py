@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -66,7 +66,7 @@ class PasswordService:
         reset_token = PasswordResetToken(
             user_id=user.id,
             token_hash=token_hash,
-            expires_at=datetime.utcnow() + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS),
         )
         self.db.add(reset_token)
         self.db.commit()
@@ -91,7 +91,7 @@ class PasswordService:
             .filter(
                 PasswordResetToken.token_hash == token_hash,
                 PasswordResetToken.used_at.is_(None),
-                PasswordResetToken.expires_at > datetime.utcnow(),
+                PasswordResetToken.expires_at > datetime.now(timezone.utc),
             )
             .first()
         )
@@ -103,7 +103,7 @@ class PasswordService:
         user.hashed_password = hash_password(new_password)
         user.token_version += 1
 
-        reset_token.used_at = datetime.utcnow()
+        reset_token.used_at = datetime.now(timezone.utc)
         self.db.commit()
         return True
 
