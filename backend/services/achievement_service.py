@@ -6,12 +6,8 @@ from typing import List
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from database import is_sqlite_session
 from models.achievements import Achievement, UserAchievement
-
-
-def _is_sqlite(db: Session) -> bool:
-    """Check if the database is SQLite."""
-    return "sqlite" in str(db.bind.url) if db.bind else False
 
 
 class AchievementService:
@@ -20,7 +16,7 @@ class AchievementService:
     def __init__(self, db: Session, user_id: int):
         self.db = db
         self.user_id = user_id
-        self._is_sqlite = _is_sqlite(db)
+        self._is_sqlite = is_sqlite_session(db)
 
     def check_and_unlock(self) -> List[Achievement]:
         """Check all achievements and unlock newly earned ones.

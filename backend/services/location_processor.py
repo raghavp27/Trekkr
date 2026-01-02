@@ -7,15 +7,11 @@ import h3
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from database import is_sqlite_session
 from models.device import Device
 from models.geo import CountryRegion, H3Cell, StateRegion
 from models.visits import IngestBatch, UserCellVisit
 from services.achievement_service import AchievementService
-
-
-def _is_sqlite(db: Session) -> bool:
-    """Check if the database is SQLite."""
-    return "sqlite" in str(db.bind.url) if db.bind else False
 
 
 class LocationProcessor:
@@ -24,7 +20,7 @@ class LocationProcessor:
     def __init__(self, db: Session, user_id: int):
         self.db = db
         self.user_id = user_id
-        self._is_sqlite = _is_sqlite(db)
+        self._is_sqlite = is_sqlite_session(db)
 
     def _ensure_device(
         self,

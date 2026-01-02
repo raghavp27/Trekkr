@@ -185,6 +185,7 @@ export default function MapScreen() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentBoundsRef = useRef<MapBounds | null>(null);
   const currentZoomRef = useRef<number>(14);
+  const cameraRef = useRef<Camera>(null);
 
   // Select which polygons to display based on zoom level
   const revealedPolygons = currentZoom < 10 ? polygonsRes6 : polygonsRes8;
@@ -270,6 +271,28 @@ export default function MapScreen() {
       onError: (error) => console.error("[MapScreen] Location error:", error),
     });
   }, [handleLocationUpdate, handleNewDiscovery]);
+
+  const zoomToCurrentLocation = async () => {
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      cameraRef.current?.setCamera({
+        centerCoordinate: [location.coords.longitude, location.coords.latitude],
+        zoomLevel: 14,
+        animationDuration: 1000,
+        animationMode: "flyTo",
+      });
+    } catch (err) {
+      console.error("Error getting current location:", err);
+    }
+  };
 
   const toggleTracking = async () => {
     if (isTracking) {
@@ -404,6 +427,7 @@ export default function MapScreen() {
         onCameraChanged={handleCameraChanged}
       >
         <Camera
+          ref={cameraRef}
           zoomLevel={initialZoom}
           centerCoordinate={[
             initialCoordinates.longitude,
@@ -423,6 +447,14 @@ export default function MapScreen() {
           />
         )}
       </MapView>
+
+      {/* My Location button */}
+      <TouchableOpacity
+        style={styles.locationButton}
+        onPress={zoomToCurrentLocation}
+      >
+        <Text style={styles.locationButtonIcon}>📍</Text>
+      </TouchableOpacity>
 
       {/* Tracking toggle button */}
       <TouchableOpacity
@@ -477,6 +509,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     textAlign: "center",
+  },
+  locationButton: {
+    position: "absolute",
+    bottom: 170,
+    right: 16,
+    backgroundColor: "#fff",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  locationButtonIcon: {
+    fontSize: 22,
   },
   trackingButton: {
     position: "absolute",
