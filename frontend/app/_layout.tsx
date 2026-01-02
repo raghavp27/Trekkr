@@ -15,7 +15,6 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading) return;
 
-    const inTabsGroup = segments[0] === '(tabs)';
     const isAuthScreen = segments[0] === 'login' || segments[0] === 'signup';
 
     if (!isAuthenticated && !isAuthScreen) {

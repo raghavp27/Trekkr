@@ -10,12 +10,7 @@ import h3
 
 from database import get_db
 from models.user import User
-from schemas.location import (
-    LocationIngestRequest,
-    LocationIngestResponse,
-    BatchLocationIngestRequest,
-    BatchLocationIngestResponse,
-)
+from schemas.location import LocationIngestRequest, LocationIngestResponse, BatchLocationIngestRequest, BatchLocationIngestResponse, SimpleLocationIngestRequest
 from services.auth import get_current_user
 from services.location_processor import LocationProcessor
 
@@ -140,4 +135,48 @@ def ingest_location_batch(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service temporarily unavailable. Please try again later.",
+        )
+
+
+@router.post("/ingest/simple", response_model=LocationIngestResponse)
+@limiter.limit("120/minute")
+def ingest_location_simple(
+    request: Request,
+    payload: SimpleLocationIngestRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Simplified location ingestion - backend computes H3 index.
+
+    Use this endpoint when the client cannot compute H3 indexes
+    (e.g., React Native without h3-js support).
+
+    Rate limit: 120 requests per minute per user.
+    """
+    # Store user_id in request state for rate limiting
+    request.state.user_id = current_user.id
+
+    # Compute H3 index on the server
+    h3_res8 = h3.latlng_to_cell(payload.latitude, payload.longitude, 8)
+
+    # Process the location
+    processor = LocationProcessor(db, current_user.id)
+
+    try:
+        result = processor.process_location(
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            h3_res8=h3_res8,
+            device_uuid=payload.device_uuid,
+            device_name=payload.device_name,
+            platform=payload.platform,
+            timestamp=payload.timestamp,
+        )
+        return result
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "service_unavailable", "message": str(e)},
         )

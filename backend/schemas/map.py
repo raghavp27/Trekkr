@@ -1,5 +1,6 @@
 """Pydantic schemas for map endpoints."""
 
+from typing import Any
 from pydantic import BaseModel, model_validator
 
 
@@ -60,3 +61,32 @@ class MapCellsResponse(BaseModel):
 
     res6: list[str]  # H3 indexes at resolution 6
     res8: list[str]  # H3 indexes at resolution 8
+
+
+class GeoJSONGeometry(BaseModel):
+    """GeoJSON Polygon geometry."""
+
+    type: str = "Polygon"
+    coordinates: list[list[list[float]]]  # [[[lng, lat], ...]]
+
+
+class GeoJSONFeatureProperties(BaseModel):
+    """Properties for a map polygon feature."""
+
+    h3_index: str
+    resolution: int
+
+
+class GeoJSONFeature(BaseModel):
+    """GeoJSON Feature for a revealed H3 cell."""
+
+    type: str = "Feature"
+    properties: GeoJSONFeatureProperties
+    geometry: GeoJSONGeometry
+
+
+class MapPolygonsResponse(BaseModel):
+    """GeoJSON FeatureCollection response for /map/polygons endpoint."""
+
+    type: str = "FeatureCollection"
+    features: list[GeoJSONFeature]

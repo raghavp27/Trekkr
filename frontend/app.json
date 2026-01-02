@@ -14,8 +14,13 @@
         "NSLocationWhenInUseUsageDescription": "Trekkr needs your location to unlock areas as you explore",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Trekkr tracks your location in the background to unlock areas as you move",
         "NSLocationAlwaysUsageDescription": "Trekkr tracks your location in the background to unlock areas as you move",
-        "UIBackgroundModes": ["location"]
-      }
+        "UIBackgroundModes": [
+          "location",
+          "location"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.raghav2007.trekkr"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,8 +34,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
-      ]
+      ],
+      "package": "com.raghav2007.trekkr"
     },
     "web": {
       "output": "static",
@@ -51,17 +60,17 @@
         }
       ],
       "expo-sqlite",
-      [
-        "@rnmapbox/maps",
-        {
-            "RNMapboxMapsDownloadToken": "YOUR_MAPBOX_SECRET_TOKEN_HERE", //TODO: Replace with your actual Mapbox secret token
-            "RNMapboxMapsVersion": "11.0.0"
-        }
-      ]
+      "@rnmapbox/maps"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "726ed3f1-84df-4cbc-9e8f-6d08d3b5f23e"
+      }
     }
   }
 }

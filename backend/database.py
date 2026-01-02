@@ -69,6 +69,11 @@ def get_db():
         db.close()
 
 
+def is_sqlite_session(db) -> bool:
+    """Check if the database session is using SQLite."""
+    return "sqlite" in str(db.bind.url) if db.bind else False
+
+
 def init_db():
     """Initialize the database and create all tables."""
     # Import models here to ensure they're registered with Base
