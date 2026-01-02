@@ -1,6 +1,6 @@
 """Per-user visits and ingestion audit records."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -12,7 +12,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from database import Base
 
@@ -43,19 +43,20 @@ class UserCellVisit(Base):
         String(25),
         ForeignKey("h3_cells.h3_index", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # Added explicit index for FK lookups
     )
     res = Column(SmallInteger, nullable=False, index=True)
-    first_visited_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    first_visited_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     last_visited_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
     visit_count = Column(Integer, default=1, nullable=False)
 
     cell = relationship("H3Cell", back_populates="user_visits")
-    user = relationship("User", backref="cell_visits")
+    user = relationship("User", backref=backref("cell_visits", passive_deletes=True))
     device = relationship("Device", backref="cell_visits")
 
 
@@ -82,6 +83,6 @@ class IngestBatch(Base):
     res_min = Column(SmallInteger, nullable=True)
     res_max = Column(SmallInteger, nullable=True)
 
-    user = relationship("User", backref="ingest_batches")
+    user = relationship("User", backref=backref("ingest_batches", passive_deletes=True))
     device = relationship("Device", backref="ingest_batches")
 

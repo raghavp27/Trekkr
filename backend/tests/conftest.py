@@ -101,11 +101,16 @@ def mock_db_session() -> MagicMock:
 
 @pytest.fixture
 def test_user(db_session: Session) -> User:
-    """Create a test user for integration tests."""
+    """Create a test user for integration tests.
+
+    Password: TestPass123
+    """
+    from services.auth import hash_password
+
     user = User(
         username="test_user",
         email="test@example.com",
-        hashed_password="$2b$12$hashedpassword",  # bcrypt hash
+        hashed_password=hash_password("TestPass123"),  # Real bcrypt hash
     )
     db_session.add(user)
     db_session.commit()
@@ -277,6 +282,7 @@ def valid_jwt_token(test_user: User) -> str:
         "username": test_user.username,
         "exp": datetime.utcnow() + timedelta(hours=1),
         "type": "access",  # Required by get_current_user
+        "token_ver": getattr(test_user, "token_version", 1),
     }
     return jwt.encode(payload, "test-secret-key", algorithm="HS256")
 
@@ -290,6 +296,12 @@ def expired_jwt_token(test_user: User, jwt_secret_key: str) -> str:
         "exp": datetime.utcnow() - timedelta(hours=1),  # Expired
     }
     return jwt.encode(payload, jwt_secret_key, algorithm="HS256")
+
+
+@pytest.fixture
+def auth_headers(valid_jwt_token: str) -> dict:
+    """Create Authorization headers for authenticated requests."""
+    return {"Authorization": f"Bearer {valid_jwt_token}"}
 
 
 # ============================================================================
@@ -324,13 +336,20 @@ def client(db_session: Session) -> TestClient:
 # Helper Functions
 # ============================================================================
 
-def create_jwt_token(user_id: int, username: str, secret_key: str = "test-secret-key") -> str:
+def create_jwt_token(
+    user_id: int,
+    username: str,
+    *,
+    token_ver: int = 1,
+    secret_key: str = "test-secret-key",
+) -> str:
     """Helper to create JWT tokens for authentication tests."""
     payload = {
         "sub": str(user_id),
         "username": username,
         "exp": datetime.utcnow() + timedelta(hours=1),
         "type": "access",  # Required by get_current_user
+        "token_ver": token_ver,
     }
     return jwt.encode(payload, secret_key, algorithm="HS256")
 

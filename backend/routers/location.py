@@ -1,5 +1,7 @@
 """Location ingestion API endpoint."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -8,13 +10,12 @@ import h3
 
 from database import get_db
 from models.user import User
-from schemas.location import (
-    LocationIngestRequest,
-    SimpleLocationIngestRequest,
-    LocationIngestResponse,
-)
+from schemas.location import LocationIngestRequest, LocationIngestResponse, BatchLocationIngestRequest, BatchLocationIngestResponse, SimpleLocationIngestRequest
 from services.auth import get_current_user
 from services.location_processor import LocationProcessor
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_id_from_request(request: Request) -> str:
@@ -85,9 +86,55 @@ def ingest_location(
         return result
     except Exception as e:
         db.rollback()
+        logger.exception("Location processing failed for user %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"error": "service_unavailable", "message": str(e)},
+            detail="Service temporarily unavailable. Please try again later.",
+        )
+
+
+@router.post("/ingest/batch", response_model=BatchLocationIngestResponse)
+@limiter.limit("30/minute")
+def ingest_location_batch(
+    request: Request,
+    payload: BatchLocationIngestRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ingest a batch of locations (up to 100) efficiently.
+
+    Use this endpoint for:
+    - Syncing locations collected while offline
+    - Batching real-time location updates (every 5-10 minutes)
+
+    **Partial success**: Invalid locations are skipped with reasons,
+    valid locations are always processed.
+
+    **Rate limit**: 30 requests per minute per user.
+
+    For >100 locations, client should chunk into multiple requests.
+    """
+    # Store user_id in request state for rate limiting
+    request.state.user_id = current_user.id
+
+    # Process the batch
+    processor = LocationProcessor(db, current_user.id)
+
+    try:
+        result = processor.process_batch(
+            locations=payload.locations,
+            device_uuid=payload.device_uuid,
+            device_name=payload.device_name,
+            platform=payload.platform,
+        )
+        return result
+    except Exception as e:
+        db.rollback()
+        logger.exception("Batch location processing failed for user %s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporarily unavailable. Please try again later.",
         )
 
 

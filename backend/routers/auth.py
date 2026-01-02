@@ -1,14 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models.device import Device
 from models.user import User
+from routers.location import limiter
 from schemas.auth import (
+    AccountDeleteRequest,
+    ChangePasswordRequest,
     DeviceResponse,
     DeviceUpdateRequest,
+    ForgotPasswordRequest,
     MessageResponse,
+    ResetPasswordRequest,
     TokenRefresh,
     TokenResponse,
     UserRegister,
@@ -21,6 +27,7 @@ from services.auth import (
     hash_password,
     verify_password,
 )
+from services.password_service import PasswordService
 
 router = APIRouter()
 
@@ -144,6 +151,15 @@ def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
             detail="User not found",
         )
 
+    # Validate token version (session invalidation check)
+    token_version = payload.get("token_ver")
+    if token_version is None or token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalidated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Return new tokens
     return create_tokens(user)
 
@@ -158,6 +174,105 @@ def get_me(current_user: User = Depends(get_current_user)):
     Raises: 401 if not authenticated or token invalid
     """
     return current_user
+
+
+@router.post("/change-password", response_model=MessageResponse)
+@limiter.limit("10/minute")
+def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Change password for the authenticated user.
+
+    Requires: Authorization header with Bearer token
+    Body: current_password, new_password
+    Returns: success message
+    Raises: 401 if current password is wrong, 422 if new password invalid
+
+    Note: All existing sessions will be invalidated after password change.
+
+    Rate limit: 10 requests per minute per user.
+    """
+    # Store user_id in request state for rate limiting
+    request.state.user_id = current_user.id
+
+    password_service = PasswordService(db)
+    success = password_service.change_password(
+        user=current_user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    return {"message": "Password changed successfully. Please log in again."}
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Request a password reset email.
+
+    Body: email
+    Returns: success message (always, to prevent email enumeration)
+
+    If the email exists, a password reset link will be sent.
+
+    Rate limit: 5 requests per minute per IP/user.
+    """
+    password_service = PasswordService(db)
+    password_service.request_password_reset(payload.email)
+
+    return {
+        "message": (
+            "If an account with that email exists, a password reset link has been sent."
+        )
+    }
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset password using a token from email.
+
+    Body: token, new_password
+    Returns: success message
+    Raises: 400 if token invalid/expired/used, 422 if new password invalid
+
+    Rate limit: 5 requests per minute per IP/user.
+    """
+    password_service = PasswordService(db)
+    success = password_service.reset_password(
+        raw_token=payload.token,
+        new_password=payload.new_password,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid, expired, or already used reset token",
+        )
+
+    return {
+        "message": "Password reset successfully. Please log in with your new password."
+    }
 
 
 @router.patch("/device", response_model=DeviceResponse)
@@ -199,4 +314,54 @@ def update_device(
     db.refresh(device)
 
     return device
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    request: AccountDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently delete the authenticated user's account and all associated data.
+
+    This action is irreversible. Deletes:
+    - User account and credentials
+    - Device record
+    - All location visit history
+    - All achievement unlocks
+    - All ingestion batch records
+
+    Global H3 cell registry is preserved (shared across users).
+
+    Example request:
+    ```json
+    {
+      "password": "MySecurePass123",
+      "confirmation": "DELETE"
+    }
+    ```
+
+    The confirmation field must contain exactly "DELETE" (case-sensitive).
+
+    Requires: Authorization header with Bearer token
+    Body: password (current password), confirmation (must be "DELETE")
+    Returns: 204 No Content on success
+    Raises:
+      - 401 Unauthorized if password is incorrect
+      - 422 Validation Error if confirmation is invalid
+    """
+    # Verify current password
+    if not verify_password(request.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password",
+        )
+
+    # Delete user (CASCADE constraints handle related data automatically)
+    db.delete(current_user)
+    db.commit()
+
+    # Return 204 No Content (no response body)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 

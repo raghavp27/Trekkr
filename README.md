@@ -43,18 +43,19 @@ Trekkr/
 ## Features
 
 ### Core Functionality
-- 🔐 **JWT Authentication** - Secure user accounts with access/refresh tokens
+- 🔐 **Advanced Auth** - JWT with access/refresh tokens, password reset, and device management
 - 📍 **Location Ingestion** - GPS tracking with H3 hexagonal cell resolution
 - 🗺️ **Multi-Level Coverage** - Track exploration at country, region, and cell levels
 - 📊 **Statistics** - Coverage percentages, visit counts, and timestamps
-- 🌍 **Global Support** - Country and state/region data for worldwide tracking
-- 🔄 **Real-time Sync** - Device-specific tracking with cloud synchronization
+- 🏆 **Achievements** - Unlockable badges for exploration milestones (e.g., "First Discovery")
+- 🌍 **Global Support** - Country, state/region, and continent data for worldwide tracking
+- 🔄 **Real-time Sync** - Single-device tracking with cloud synchronization
 
 ### Technical Features
 - **H3 Geospatial Indexing** - Hierarchical hexagonal grid (res 6 & 8)
-- **PostGIS Integration** - Spatial queries for geographic containment
-- **Rate Limiting** - 120 requests/minute per user for location ingestion
-- **Comprehensive Testing** - 85+ integration tests with 100% pass rate
+- **PostGIS Integration** - Spatial queries with optimized GIST indexes
+- **Rate Limiting** - Per-user limits for location ingestion and auth actions
+- **Comprehensive Testing** - 150+ integration tests with high coverage
 - 📱 **Cross-platform** - iOS, Android, Web (Expo framework)
 
 ## Getting Started
@@ -113,7 +114,7 @@ alembic upgrade head
 #### 5. Start the API Server
 
 ```bash
-uvicorn main:app --reload
+uvicorn main:app --reload --env-file .env
 ```
 
 The API will be available at:
@@ -156,8 +157,9 @@ The API will be available at:
 - **JWT Authentication** - Secure access/refresh token system
 - **H3 Geospatial Library** - Hierarchical hexagonal grid indexing
 - **Pydantic v2** - Request/response validation and serialization
-- **SlowAPI** - Rate limiting for location ingestion endpoints
+- **SlowAPI** - Rate limiting for location ingestion and auth endpoints
 - **Alembic** - Database migrations
+- **SendGrid** - Transactional email service for password management
 
 ### Frontend Stack
 
@@ -177,12 +179,24 @@ The API will be available at:
 - `POST /api/auth/logout` - Invalidate refresh token
 - `POST /api/auth/refresh` - Get new access token
 - `GET /api/auth/me` - Get current user profile
+- `POST /api/auth/change-password` - Change password (rate limited)
+- `POST /api/auth/forgot-password` - Request password reset email
+- `POST /api/auth/reset-password` - Reset password with email token
+- `PATCH /api/auth/device` - Update device metadata (single device per user)
+- `DELETE /api/auth/account` - Delete account
 
 ### Location Tracking
-- `POST /api/v1/location/ingest` - Upload visited H3 cells (rate limited: 120/min)
+- `POST /api/v1/location/ingest` - Upload single location (rate limited: 120/min)
   - Validates H3 cell matches GPS coordinates
   - Performs reverse geocoding to country/region
   - Returns newly discovered countries/regions
+
+- `POST /api/v1/location/ingest/batch` - Upload batch of locations (rate limited: 30/min)
+  - Accepts 1-100 locations per request
+  - Optimized bulk processing with efficient geocoding
+  - Partial success: invalid locations skipped with reasons
+  - Automatic deduplication within batch
+  - Returns aggregated discoveries and achievement unlocks
 
 ### Map Data
 - `GET /api/v1/map/summary` - Get all visited countries and regions
@@ -193,6 +207,10 @@ The API will be available at:
   - Query params: `min_lng`, `min_lat`, `max_lng`, `max_lat`
   - Returns cells at resolution 6 and 8
   - Bbox validation (max 180° longitude, 90° latitude span)
+
+### Achievements
+- `GET /api/v1/achievements` - List all achievements with user unlock status
+- `GET /api/v1/achievements/unlocked` - List only user's earned badges
 
 ### Statistics
 - `GET /api/v1/stats/countries` - Get country coverage statistics
@@ -223,7 +241,7 @@ The API will be available at:
 
 ### Backend Tests
 
-The backend has comprehensive test coverage with 85+ integration tests:
+The backend has comprehensive test coverage with 176 integration tests:
 
 ```bash
 cd backend
@@ -233,19 +251,20 @@ docker compose up -d db-test
 
 # Run all tests
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/ -v
+  python3 -m pytest tests/ -v
 
 # Run specific test file
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/test_stats_service.py -v
+  python3 -m pytest tests/test_stats_service.py -v
 
 # Run with coverage
 TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_test" \
-  python -m pytest tests/ --cov=. --cov-report=html
+  python3 -m pytest tests/ --cov=. --cov-report=html
 ```
 
 **Test Coverage:**
-- ✅ Location ingestion and processing
+- ✅ Location ingestion (single and batch)
+- ✅ Batch processing with deduplication
 - ✅ Map endpoints and services
 - ✅ Statistics endpoints and services
 - ✅ Authentication and authorization
@@ -253,17 +272,21 @@ TEST_DATABASE_URL="postgresql+psycopg2://appuser:apppass@localhost:5434/appdb_te
 - ✅ H3 coordinate validation
 - ✅ Reverse geocoding
 - ✅ Discovery flow (first visits)
+- ✅ Partial success handling
 
 ## Database Schema
 
 ### Core Tables
 - `users` - User accounts
-- `devices` - User devices for tracking
-- `regions_country` - Country geometries and metadata
+- `devices` - User devices (single device per user)
+- `regions_country` - Country geometries and metadata (includes continent)
 - `regions_state` - State/province geometries
 - `h3_cells` - Registry of visited H3 cells with geographic references
 - `user_cell_visits` - Per-user cell ownership and visit metadata
 - `ingest_batches` - Audit log of location uploads
+- `achievements` - Registry of available exploration badges
+- `user_achievements` - Track unlocked badges for each user
+- `password_resets` - Secure tokens for password recovery
 
 ### Spatial Queries
 The app uses PostGIS for efficient spatial operations:

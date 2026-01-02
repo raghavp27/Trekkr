@@ -6,6 +6,7 @@ from models.geo import CountryRegion, StateRegion, H3Cell
 from models.visits import UserCellVisit, IngestBatch
 from models.stats import UserCountryStat, UserStateStat, UserStreak
 from models.achievements import Achievement, UserAchievement
+from models.password_reset import PasswordResetToken
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "UserStreak",
     "Achievement",
     "UserAchievement",
+    "PasswordResetToken",
 ]

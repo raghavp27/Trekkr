@@ -10,10 +10,10 @@ todos:
     status: pending
   - id: password-change
     content: Implement POST /auth/change-password endpoint
-    status: pending
+    status: completed
   - id: account-deletion
     content: Implement DELETE /auth/account with cascade validation
-    status: pending
+    status: completed
   - id: achievements-system
     content: Create achievement service, seed 10 achievements, add endpoints
     status: pending

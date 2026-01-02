@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from database import Base
 
@@ -33,5 +33,5 @@ class Device(Base):
         nullable=False,
     )
 
-    user = relationship("User", backref="devices")
+    user = relationship("User", backref=backref("devices", passive_deletes=True))
 

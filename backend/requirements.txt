@@ -18,3 +18,4 @@ h3>=4.4.1  # H3 geospatial indexing for hexagonal grid cells
 slowapi>=0.1.9
 pytest>=7.4.0
 pytest-cov>=4.1.0
+sendgrid>=6.12.5
