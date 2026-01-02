@@ -174,7 +174,9 @@ export default function MapScreen() {
     null
   );
   // Cache both resolutions for instant switching
-  const [polygonsRes6, setPolygonsRes6] = useState<MapPolygonsResponse | null>(null);
+  const [polygonsRes6, setPolygonsRes6] = useState<MapPolygonsResponse | null>(
+    null
+  );
   const [polygonsRes8, setPolygonsRes8] = useState<MapPolygonsResponse | null>(
     USE_SAMPLE_DATA ? SAMPLE_TEST_POLYGONS : null
   );
@@ -219,7 +221,7 @@ export default function MapScreen() {
 
         // Fetch both resolutions in parallel for instant switching
         const [res6Response, res8Response] = await Promise.all([
-          getMapPolygons(accessToken, bbox, 5),  // Force res-6
+          getMapPolygons(accessToken, bbox, 5), // Force res-6
           getMapPolygons(accessToken, bbox, 15), // Force res-8
         ]);
 
@@ -236,7 +238,10 @@ export default function MapScreen() {
     (response: LocationIngestResponse) => {
       // Refresh polygons when we get a location update
       if (!USE_SAMPLE_DATA && currentBoundsRef.current) {
-        fetchPolygonsForViewport(currentBoundsRef.current, currentZoomRef.current);
+        fetchPolygonsForViewport(
+          currentBoundsRef.current,
+          currentZoomRef.current
+        );
       }
     },
     [fetchPolygonsForViewport]
@@ -420,9 +425,10 @@ export default function MapScreen() {
       <MapView
         style={styles.map}
         styleURL="mapbox://styles/mapbox/streets-v12"
-        logoEnabled={false}
+        logoEnabled={true}
+        logoPosition={{ bottom: 16, left: 8 }}
         attributionEnabled={true}
-        attributionPosition={{ bottom: 8, right: 8 }}
+        attributionPosition={{ bottom: 15, left: 85 }}
         scaleBarEnabled={false}
         onCameraChanged={handleCameraChanged}
       >

@@ -39,5 +39,10 @@ export const API_ENDPOINTS = {
         INGEST: "/api/v1/location/ingest",
         INGEST_SIMPLE: "/api/v1/location/ingest/simple",
     },
+    STATS: {
+        OVERVIEW: "/api/v1/stats/overview",
+        COUNTRIES: "/api/v1/stats/countries",
+        REGIONS: "/api/v1/stats/regions",
+    },
 } as const;
 

@@ -308,3 +308,52 @@ export async function ingestLocation(
     );
 }
 
+// Stats Types
+export interface StatsUserInfo {
+    id: number;
+    username: string;
+    created_at: string;
+}
+
+export interface StatsData {
+    countries_visited: number;
+    regions_visited: number;
+    cells_visited_res6: number;
+    cells_visited_res8: number;
+    total_visit_count: number;
+    first_visit_at: string | null;
+    last_visit_at: string | null;
+}
+
+export interface RecentCountry {
+    code: string;
+    name: string;
+    visited_at: string;
+}
+
+export interface RecentRegion {
+    code: string;
+    name: string;
+    country_name: string;
+    visited_at: string;
+}
+
+export interface StatsOverviewResponse {
+    user: StatsUserInfo;
+    stats: StatsData;
+    recent_countries: RecentCountry[];
+    recent_regions: RecentRegion[];
+}
+
+export async function getStatsOverview(
+    accessToken: string
+): Promise<StatsOverviewResponse> {
+    return authenticatedRequest<StatsOverviewResponse>(
+        API_ENDPOINTS.STATS.OVERVIEW,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+

@@ -38,7 +38,7 @@ def seed_states():
         print(f"Found {len(country_map)} countries in database")
 
         if not country_map:
-            print("✗ No countries found! Please run seed_countries.py first.")
+            print("No countries found! Please run seed_countries.py first.")
             return
 
         inserted = 0
@@ -83,7 +83,7 @@ def seed_states():
         # Commit all changes
         db.commit()
 
-        print(f"✓ Seeding complete!")
+        print("Seeding complete!")
         print(f"  - Inserted: {inserted} states")
         print(f"  - Updated: {updated} states")
         print(f"  - Skipped: {skipped} states (country not found)")
@@ -91,7 +91,7 @@ def seed_states():
 
     except Exception as e:
         db.rollback()
-        print(f"✗ Error seeding states: {e}")
+        print(f"Error seeding states: {e}")
         raise
     finally:
         db.close()
