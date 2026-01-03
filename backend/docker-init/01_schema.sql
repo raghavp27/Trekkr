@@ -16,13 +16,6 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
---
--- Name: postgis; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -62,15 +55,6 @@ ALTER SEQUENCE public.achievements_id_seq OWNED BY public.achievements.id;
 
 
 --
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.alembic_version (
-    version_num character varying(32) NOT NULL
-);
-
-
---
 -- Name: devices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -80,7 +64,9 @@ CREATE TABLE public.devices (
     platform character varying(50),
     app_version character varying(50),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    device_uuid character varying(255),
+    device_name character varying(255) DEFAULT 'My Phone'::character varying
 );
 
 
@@ -156,6 +142,40 @@ ALTER SEQUENCE public.ingest_batches_id_seq OWNED BY public.ingest_batches.id;
 
 
 --
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.password_reset_tokens (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    token_hash character varying(64) NOT NULL,
+    expires_at timestamp without time zone NOT NULL,
+    used_at timestamp without time zone,
+    created_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.password_reset_tokens_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.password_reset_tokens_id_seq OWNED BY public.password_reset_tokens.id;
+
+
+--
 -- Name: regions_country; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -167,7 +187,10 @@ CREATE TABLE public.regions_country (
     geom public.geometry(MultiPolygon,4326),
     land_cells_total integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    continent character varying(32),
+    land_cells_total_resolution6 integer,
+    land_cells_total_resolution8 integer
 );
 
 
@@ -203,7 +226,9 @@ CREATE TABLE public.regions_state (
     geom public.geometry(MultiPolygon,4326),
     land_cells_total integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    land_cells_total_resolution6 integer,
+    land_cells_total_resolution8 integer
 );
 
 
@@ -409,7 +434,8 @@ CREATE TABLE public.users (
     email character varying(255) NOT NULL,
     username character varying(64) NOT NULL,
     hashed_password character varying(255) NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    token_version integer DEFAULT 0 NOT NULL
 );
 
 
@@ -452,6 +478,13 @@ ALTER TABLE ONLY public.devices ALTER COLUMN id SET DEFAULT nextval('public.devi
 --
 
 ALTER TABLE ONLY public.ingest_batches ALTER COLUMN id SET DEFAULT nextval('public.ingest_batches_id_seq'::regclass);
+
+
+--
+-- Name: password_reset_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens ALTER COLUMN id SET DEFAULT nextval('public.password_reset_tokens_id_seq'::regclass);
 
 
 --
@@ -519,14 +552,6 @@ ALTER TABLE ONLY public.achievements
 
 
 --
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.alembic_version
-    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
-
-
---
 -- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -548,6 +573,14 @@ ALTER TABLE ONLY public.h3_cells
 
 ALTER TABLE ONLY public.ingest_batches
     ADD CONSTRAINT ingest_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id);
 
 
 --
@@ -773,6 +806,27 @@ CREATE INDEX ix_ingest_batches_user_id ON public.ingest_batches USING btree (use
 
 
 --
+-- Name: ix_password_reset_tokens_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_password_reset_tokens_id ON public.password_reset_tokens USING btree (id);
+
+
+--
+-- Name: ix_password_reset_tokens_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_password_reset_tokens_token_hash ON public.password_reset_tokens USING btree (token_hash);
+
+
+--
+-- Name: ix_password_reset_tokens_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_password_reset_tokens_user_id ON public.password_reset_tokens USING btree (user_id);
+
+
+--
 -- Name: ix_regions_country_geom; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -957,6 +1011,14 @@ ALTER TABLE ONLY public.ingest_batches
 
 ALTER TABLE ONLY public.ingest_batches
     ADD CONSTRAINT ingest_batches_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

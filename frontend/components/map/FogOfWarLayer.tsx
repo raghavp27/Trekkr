@@ -27,9 +27,21 @@ export function FogOfWarLayer({ revealedPolygons }: FogOfWarLayerProps) {
 
         if (revealedPolygons?.features) {
             for (const feature of revealedPolygons.features) {
-                if (feature.geometry?.coordinates?.[0]) {
-                    // Keep coordinates as-is (should be counter-clockwise for holes)
-                    holes.push(feature.geometry.coordinates[0]);
+                const geom = feature.geometry;
+                if (!geom?.coordinates) continue;
+
+                if (geom.type === 'Polygon') {
+                    // Polygon: coordinates[0] is the outer ring
+                    if (geom.coordinates[0]) {
+                        holes.push(geom.coordinates[0] as number[][]);
+                    }
+                } else if (geom.type === 'MultiPolygon') {
+                    // MultiPolygon: coordinates[i][0] is the outer ring of each polygon
+                    for (const polygon of geom.coordinates) {
+                        if (polygon[0]) {
+                            holes.push(polygon[0] as number[][]);
+                        }
+                    }
                 }
             }
         }

@@ -269,13 +269,29 @@ export interface GeoJSONPolygonGeometry {
     coordinates: number[][][];
 }
 
+export interface GeoJSONMultiPolygonGeometry {
+    type: 'MultiPolygon';
+    coordinates: number[][][][];
+}
+
+// Properties for H3 cell polygons
+export interface H3CellProperties {
+    h3_index: string;
+    resolution: number;
+}
+
+// Properties for country/state region polygons
+export interface RegionPolygonProperties {
+    id: number;
+    code: string | null;
+    name: string;
+    type: 'country' | 'state';
+}
+
 export interface GeoJSONFeature {
     type: 'Feature';
-    properties: {
-        h3_index: string;
-        resolution: number;
-    };
-    geometry: GeoJSONPolygonGeometry;
+    properties: H3CellProperties | RegionPolygonProperties;
+    geometry: GeoJSONPolygonGeometry | GeoJSONMultiPolygonGeometry;
 }
 
 export interface MapPolygonsResponse {
@@ -301,6 +317,46 @@ export async function getMapPolygons(
 
     return authenticatedRequest<MapPolygonsResponse>(
         `${API_ENDPOINTS.MAP.POLYGONS}?${params.toString()}`,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+
+export async function getCountryPolygons(
+    accessToken: string,
+    bbox: BoundingBox
+): Promise<MapPolygonsResponse> {
+    const params = new URLSearchParams({
+        min_lng: bbox.min_lng.toString(),
+        min_lat: bbox.min_lat.toString(),
+        max_lng: bbox.max_lng.toString(),
+        max_lat: bbox.max_lat.toString(),
+    });
+
+    return authenticatedRequest<MapPolygonsResponse>(
+        `${API_ENDPOINTS.MAP.POLYGONS_COUNTRIES}?${params.toString()}`,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+
+export async function getStatePolygons(
+    accessToken: string,
+    bbox: BoundingBox
+): Promise<MapPolygonsResponse> {
+    const params = new URLSearchParams({
+        min_lng: bbox.min_lng.toString(),
+        min_lat: bbox.min_lat.toString(),
+        max_lng: bbox.max_lng.toString(),
+        max_lat: bbox.max_lat.toString(),
+    });
+
+    return authenticatedRequest<MapPolygonsResponse>(
+        `${API_ENDPOINTS.MAP.POLYGONS_STATES}?${params.toString()}`,
         accessToken,
         {
             method: 'GET',
@@ -452,4 +508,7 @@ export async function getAchievements(
         }
     );
 }
+
+
+
 

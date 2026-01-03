@@ -205,3 +205,192 @@ class TestMapCellsEndpoint:
         data = response.json()
         assert data["res6"] == []
         assert data["res8"] == []
+
+
+@pytest.mark.integration
+class TestMapCountryPolygonsEndpoint:
+    """Test GET /api/v1/map/polygons/countries endpoint."""
+
+    def test_unauthenticated_returns_401(self, client: TestClient):
+        """Test that unauthenticated request returns 401."""
+        response = client.get(
+            "/api/v1/map/polygons/countries",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+        )
+        assert response.status_code == 401
+
+    def test_authenticated_empty_user_returns_empty_features(
+        self, client: TestClient, test_user: User
+    ):
+        """Test that authenticated user with no visits gets empty features."""
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        response = client.get(
+            "/api/v1/map/polygons/countries",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "FeatureCollection"
+        assert data["features"] == []
+
+    def test_large_bbox_is_allowed(self, client: TestClient, test_user: User):
+        """Test that large bounding boxes are allowed for country view."""
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        # This would fail for regular /polygons endpoint but should work here
+        response = client.get(
+            "/api/v1/map/polygons/countries",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+
+    def test_returns_visited_country_geometry(
+        self,
+        client: TestClient,
+        db_session,
+        test_user: User,
+        test_country_usa: CountryRegion,
+        test_state_california: StateRegion,
+    ):
+        """Test that visited country geometry is returned."""
+        # Add geometry to test country
+        db_session.execute(text("""
+            UPDATE regions_country
+            SET geom = ST_SetSRID(ST_MakePolygon(ST_GeomFromText(
+                'LINESTRING(-125 24, -125 50, -66 50, -66 24, -125 24)'
+            )), 4326)
+            WHERE id = :country_id
+        """), {"country_id": test_country_usa.id})
+
+        # Create visit
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, first_visited_at, last_visited_at, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), NOW(), NOW(), 1)
+        """), {
+            "h3_index": SAN_FRANCISCO["h3_res8"],
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": SAN_FRANCISCO["longitude"],
+            "lat": SAN_FRANCISCO["latitude"],
+        })
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, NOW(), NOW(), 1)
+        """), {"user_id": test_user.id, "h3_index": SAN_FRANCISCO["h3_res8"]})
+        db_session.commit()
+
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        response = client.get(
+            "/api/v1/map/polygons/countries",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) == 1
+        assert data["features"][0]["properties"]["code"] == "US"
+        assert data["features"][0]["properties"]["type"] == "country"
+        assert data["features"][0]["geometry"] is not None
+
+
+@pytest.mark.integration
+class TestMapStatePolygonsEndpoint:
+    """Test GET /api/v1/map/polygons/states endpoint."""
+
+    def test_unauthenticated_returns_401(self, client: TestClient):
+        """Test that unauthenticated request returns 401."""
+        response = client.get(
+            "/api/v1/map/polygons/states",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+        )
+        assert response.status_code == 401
+
+    def test_authenticated_empty_user_returns_empty_features(
+        self, client: TestClient, test_user: User
+    ):
+        """Test that authenticated user with no visits gets empty features."""
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        response = client.get(
+            "/api/v1/map/polygons/states",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "FeatureCollection"
+        assert data["features"] == []
+
+    def test_large_bbox_is_allowed(self, client: TestClient, test_user: User):
+        """Test that large bounding boxes are allowed for state view."""
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        response = client.get(
+            "/api/v1/map/polygons/states",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+
+    def test_returns_visited_state_geometry(
+        self,
+        client: TestClient,
+        db_session,
+        test_user: User,
+        test_country_usa: CountryRegion,
+        test_state_california: StateRegion,
+    ):
+        """Test that visited state geometry is returned."""
+        # Add geometry to test state
+        db_session.execute(text("""
+            UPDATE regions_state
+            SET geom = ST_SetSRID(ST_MakePolygon(ST_GeomFromText(
+                'LINESTRING(-125 32, -125 42, -114 42, -114 32, -125 32)'
+            )), 4326)
+            WHERE id = :state_id
+        """), {"state_id": test_state_california.id})
+
+        # Create visit
+        db_session.execute(text("""
+            INSERT INTO h3_cells (h3_index, res, country_id, state_id, centroid, first_visited_at, last_visited_at, visit_count)
+            VALUES (:h3_index, 8, :country_id, :state_id,
+                    ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), NOW(), NOW(), 1)
+        """), {
+            "h3_index": SAN_FRANCISCO["h3_res8"],
+            "country_id": test_country_usa.id,
+            "state_id": test_state_california.id,
+            "lon": SAN_FRANCISCO["longitude"],
+            "lat": SAN_FRANCISCO["latitude"],
+        })
+        db_session.execute(text("""
+            INSERT INTO user_cell_visits (user_id, h3_index, res, first_visited_at, last_visited_at, visit_count)
+            VALUES (:user_id, :h3_index, 8, NOW(), NOW(), 1)
+        """), {"user_id": test_user.id, "h3_index": SAN_FRANCISCO["h3_res8"]})
+        db_session.commit()
+
+        token = create_jwt_token(test_user.id, test_user.username)
+
+        response = client.get(
+            "/api/v1/map/polygons/states",
+            params={"min_lng": -180, "min_lat": -90, "max_lng": 180, "max_lat": 90},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) == 1
+        assert data["features"][0]["properties"]["code"] == "US-CA"
+        assert data["features"][0]["properties"]["type"] == "state"
+        assert data["features"][0]["geometry"] is not None

@@ -38,6 +38,8 @@ export const API_ENDPOINTS = {
         SUMMARY: "/api/v1/map/summary",
         CELLS: "/api/v1/map/cells",
         POLYGONS: "/api/v1/map/polygons",
+        POLYGONS_COUNTRIES: "/api/v1/map/polygons/countries",
+        POLYGONS_STATES: "/api/v1/map/polygons/states",
     },
     LOCATION: {
         INGEST: "/api/v1/location/ingest",
@@ -53,4 +55,7 @@ export const API_ENDPOINTS = {
         UNLOCKED: "/api/v1/achievements/unlocked",
     },
 } as const;
+
+
+
 
