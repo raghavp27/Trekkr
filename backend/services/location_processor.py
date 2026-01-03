@@ -29,6 +29,8 @@ class LocationProcessor:
         platform: Optional[str] = None,
     ) -> int:
         """Get or create user's single device."""
+        from sqlalchemy.exc import IntegrityError
+
         device = self.db.query(Device).filter(Device.user_id == self.user_id).first()
 
         if not device:
@@ -40,7 +42,14 @@ class LocationProcessor:
                 platform=platform or "unknown",
             )
             self.db.add(device)
-            self.db.flush()
+            try:
+                self.db.flush()
+            except IntegrityError:
+                # Race condition: another request created the device first
+                self.db.rollback()
+                device = self.db.query(Device).filter(
+                    Device.user_id == self.user_id
+                ).first()
         else:
             # Update metadata if provided
             if device_uuid and device.device_uuid != device_uuid:

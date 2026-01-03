@@ -30,6 +30,29 @@ export interface ApiError {
     message?: string;
 }
 
+export interface ForgotPasswordData {
+    email: string;
+}
+
+export interface ResetPasswordData {
+    token: string;
+    new_password: string;
+}
+
+export interface MessageResponse {
+    message: string;
+}
+
+export interface ChangePasswordData {
+    current_password: string;
+    new_password: string;
+}
+
+export interface DeleteAccountData {
+    password: string;
+    confirmation: string;
+}
+
 async function apiRequest<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -121,6 +144,52 @@ export async function refreshToken(
     });
 }
 
+export async function forgotPassword(
+    data: ForgotPasswordData
+): Promise<MessageResponse> {
+    return apiRequest<MessageResponse>(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+export async function resetPassword(
+    data: ResetPasswordData
+): Promise<MessageResponse> {
+    return apiRequest<MessageResponse>(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+export async function changePassword(
+    accessToken: string,
+    data: ChangePasswordData
+): Promise<MessageResponse> {
+    return authenticatedRequest<MessageResponse>(
+        API_ENDPOINTS.AUTH.CHANGE_PASSWORD,
+        accessToken,
+        {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }
+    );
+}
+
+export async function deleteAccount(
+    accessToken: string,
+    data: DeleteAccountData
+): Promise<void> {
+    return authenticatedRequest<void>(
+        API_ENDPOINTS.AUTH.DELETE_ACCOUNT,
+        accessToken,
+        {
+            method: 'DELETE',
+            body: JSON.stringify(data),
+        }
+    );
+}
+
 export async function getCurrentUser(
     accessToken: string
 ): Promise<UserResponse> {
@@ -200,13 +269,29 @@ export interface GeoJSONPolygonGeometry {
     coordinates: number[][][];
 }
 
+export interface GeoJSONMultiPolygonGeometry {
+    type: 'MultiPolygon';
+    coordinates: number[][][][];
+}
+
+// Properties for H3 cell polygons
+export interface H3CellProperties {
+    h3_index: string;
+    resolution: number;
+}
+
+// Properties for country/state region polygons
+export interface RegionPolygonProperties {
+    id: number;
+    code: string | null;
+    name: string;
+    type: 'country' | 'state';
+}
+
 export interface GeoJSONFeature {
     type: 'Feature';
-    properties: {
-        h3_index: string;
-        resolution: number;
-    };
-    geometry: GeoJSONPolygonGeometry;
+    properties: H3CellProperties | RegionPolygonProperties;
+    geometry: GeoJSONPolygonGeometry | GeoJSONMultiPolygonGeometry;
 }
 
 export interface MapPolygonsResponse {
@@ -232,6 +317,46 @@ export async function getMapPolygons(
 
     return authenticatedRequest<MapPolygonsResponse>(
         `${API_ENDPOINTS.MAP.POLYGONS}?${params.toString()}`,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+
+export async function getCountryPolygons(
+    accessToken: string,
+    bbox: BoundingBox
+): Promise<MapPolygonsResponse> {
+    const params = new URLSearchParams({
+        min_lng: bbox.min_lng.toString(),
+        min_lat: bbox.min_lat.toString(),
+        max_lng: bbox.max_lng.toString(),
+        max_lat: bbox.max_lat.toString(),
+    });
+
+    return authenticatedRequest<MapPolygonsResponse>(
+        `${API_ENDPOINTS.MAP.POLYGONS_COUNTRIES}?${params.toString()}`,
+        accessToken,
+        {
+            method: 'GET',
+        }
+    );
+}
+
+export async function getStatePolygons(
+    accessToken: string,
+    bbox: BoundingBox
+): Promise<MapPolygonsResponse> {
+    const params = new URLSearchParams({
+        min_lng: bbox.min_lng.toString(),
+        min_lat: bbox.min_lat.toString(),
+        max_lng: bbox.max_lng.toString(),
+        max_lat: bbox.max_lat.toString(),
+    });
+
+    return authenticatedRequest<MapPolygonsResponse>(
+        `${API_ENDPOINTS.MAP.POLYGONS_STATES}?${params.toString()}`,
         accessToken,
         {
             method: 'GET',
@@ -383,4 +508,7 @@ export async function getAchievements(
         }
     );
 }
+
+
+
 

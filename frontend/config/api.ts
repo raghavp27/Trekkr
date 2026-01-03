@@ -29,11 +29,17 @@ export const API_ENDPOINTS = {
         LOGOUT: "/api/auth/logout",
         REFRESH: "/api/auth/refresh",
         ME: "/api/auth/me",
+        FORGOT_PASSWORD: "/api/auth/forgot-password",
+        RESET_PASSWORD: "/api/auth/reset-password",
+        CHANGE_PASSWORD: "/api/auth/change-password",
+        DELETE_ACCOUNT: "/api/auth/account",
     },
     MAP: {
         SUMMARY: "/api/v1/map/summary",
         CELLS: "/api/v1/map/cells",
         POLYGONS: "/api/v1/map/polygons",
+        POLYGONS_COUNTRIES: "/api/v1/map/polygons/countries",
+        POLYGONS_STATES: "/api/v1/map/polygons/states",
     },
     LOCATION: {
         INGEST: "/api/v1/location/ingest",
@@ -49,4 +55,7 @@ export const API_ENDPOINTS = {
         UNLOCKED: "/api/v1/achievements/unlocked",
     },
 } as const;
+
+
+
 

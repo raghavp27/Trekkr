@@ -1,6 +1,6 @@
 """Pydantic schemas for map endpoints."""
 
-from typing import Any
+from typing import Any, List
 from pydantic import BaseModel, model_validator
 
 
@@ -56,6 +56,33 @@ class BoundingBox(BaseModel):
         return self
 
 
+class LargeBoundingBox(BaseModel):
+    """Geographic bounding box without size limits (for country/state views)."""
+
+    min_lng: float
+    min_lat: float
+    max_lng: float
+    max_lat: float
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "LargeBoundingBox":
+        """Validate bounding box constraints (no size limit)."""
+        # Clamp coordinates to valid ranges
+        self.min_lat = max(-90, min(90, self.min_lat))
+        self.max_lat = max(-90, min(90, self.max_lat))
+        self.min_lng = max(-180, min(180, self.min_lng))
+        self.max_lng = max(-180, min(180, self.max_lng))
+
+        # Handle world-wrapping: if min > max after clamping, use full world bounds
+        if self.min_lng >= self.max_lng:
+            self.min_lng = -180
+            self.max_lng = 180
+        if self.min_lat >= self.max_lat:
+            self.min_lat = -90
+            self.max_lat = 90
+        return self
+
+
 class MapCellsResponse(BaseModel):
     """Response for /map/cells endpoint."""
 
@@ -86,7 +113,12 @@ class GeoJSONFeature(BaseModel):
 
 
 class MapPolygonsResponse(BaseModel):
-    """GeoJSON FeatureCollection response for /map/polygons endpoint."""
+    """GeoJSON FeatureCollection response for /map/polygons endpoint.
+
+    Uses Any for features to support both simple Polygons (H3 cells)
+    and complex MultiPolygons (country/state boundaries).
+    """
+    model_config = {"extra": "allow"}
 
     type: str = "FeatureCollection"
-    features: list[GeoJSONFeature]
+    features: list[Any]  # Flexible to handle Polygon and MultiPolygon geometries

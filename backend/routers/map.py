@@ -13,6 +13,7 @@ from schemas.map import (
     MapCellsResponse,
     MapPolygonsResponse,
     BoundingBox,
+    LargeBoundingBox,
 )
 from services.auth import get_current_user
 from services.map_service import MapService
@@ -128,6 +129,84 @@ def get_map_polygons(
         max_lng=bbox.max_lng,
         max_lat=bbox.max_lat,
         zoom=zoom,
+    )
+
+    return result
+
+
+@router.get("/polygons/countries", response_model=MapPolygonsResponse)
+def get_country_polygons(
+    min_lng: float,
+    min_lat: float,
+    max_lng: float,
+    max_lat: float,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get visited country geometries as GeoJSON polygons.
+
+    Returns a GeoJSON FeatureCollection with country boundary polygons
+    for countries the user has visited within the specified viewport.
+    Best used at zoom levels < 4 for country-level fog of war.
+    """
+    try:
+        bbox = LargeBoundingBox(
+            min_lng=min_lng,
+            min_lat=min_lat,
+            max_lng=max_lng,
+            max_lat=max_lat,
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e.errors()[0]["msg"]),
+        )
+
+    service = MapService(db, current_user.id)
+    result = service.get_visited_country_polygons(
+        min_lng=bbox.min_lng,
+        min_lat=bbox.min_lat,
+        max_lng=bbox.max_lng,
+        max_lat=bbox.max_lat,
+    )
+
+    return result
+
+
+@router.get("/polygons/states", response_model=MapPolygonsResponse)
+def get_state_polygons(
+    min_lng: float,
+    min_lat: float,
+    max_lng: float,
+    max_lat: float,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get visited state/region geometries as GeoJSON polygons.
+
+    Returns a GeoJSON FeatureCollection with state/province boundary polygons
+    for states the user has visited within the specified viewport.
+    Best used at zoom levels 4-6 for regional fog of war.
+    """
+    try:
+        bbox = LargeBoundingBox(
+            min_lng=min_lng,
+            min_lat=min_lat,
+            max_lng=max_lng,
+            max_lat=max_lat,
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e.errors()[0]["msg"]),
+        )
+
+    service = MapService(db, current_user.id)
+    result = service.get_visited_state_polygons(
+        min_lng=bbox.min_lng,
+        min_lat=bbox.min_lat,
+        max_lng=bbox.max_lng,
+        max_lat=bbox.max_lat,
     )
 
     return result

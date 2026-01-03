@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
@@ -10,6 +11,7 @@ import { tokenStorage } from "@/services/storage";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [stats, setStats] = useState<StatsOverviewResponse | null>(null);
@@ -271,6 +273,18 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Settings Button */}
+        <TouchableOpacity
+          style={[styles.settingsButton, { backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#fff', borderColor: colors.icon + '30' }]}
+          onPress={() => router.push('/settings')}
+        >
+          <View style={styles.settingsButtonLeft}>
+            <Ionicons name="settings-outline" size={20} color={colors.tint} style={styles.settingsIcon} />
+            <Text style={[styles.settingsButtonText, { color: colors.text }]}>Settings</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.icon} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -431,12 +445,33 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: "center",
   },
+  settingsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 56,
+    borderRadius: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+  },
+  settingsButtonLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  settingsIcon: {
+    marginRight: 12,
+  },
+  settingsButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     height: 50,
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: "auto",
     borderWidth: 1,
     borderColor: "#ef4444",

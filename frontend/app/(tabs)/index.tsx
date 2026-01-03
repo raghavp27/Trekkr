@@ -15,6 +15,8 @@ import { MAPBOX_ACCESS_TOKEN } from "@/config/mapbox";
 import { FogOfWarLayer } from "@/components/map/FogOfWarLayer";
 import {
   getMapPolygons,
+  getCountryPolygons,
+  getStatePolygons,
   BoundingBox,
   MapPolygonsResponse,
   LocationIngestResponse,
@@ -41,8 +43,13 @@ interface MapBounds {
   sw: [number, number]; // [lng, lat]
 }
 
-const MIN_ZOOM_FOR_CELLS = 4; // Don't fetch when zoomed out too far
+const MIN_ZOOM_FOR_POLYGONS = 0; // Minimum zoom to fetch any polygons
 const DEBOUNCE_MS = 300;
+
+// Zoom level thresholds for different polygon types
+const ZOOM_THRESHOLD_COUNTRY = 4;  // < 4: show countries
+const ZOOM_THRESHOLD_STATE = 7;    // 4-7: show states
+const ZOOM_THRESHOLD_RES6 = 10;    // 7-10: show res-6 H3 cells, >= 10: show res-8
 
 // Sample test polygons with REAL H3 hexagon boundaries (resolution 8)
 const SAMPLE_TEST_POLYGONS: MapPolygonsResponse = {
@@ -175,10 +182,10 @@ export default function MapScreen() {
   const [userLocation, setUserLocation] = useState<UserCoordinates | null>(
     null
   );
-  // Cache both resolutions for instant switching
-  const [polygonsRes6, setPolygonsRes6] = useState<MapPolygonsResponse | null>(
-    null
-  );
+  // Cache all polygon types for instant switching
+  const [polygonsCountry, setPolygonsCountry] = useState<MapPolygonsResponse | null>(null);
+  const [polygonsState, setPolygonsState] = useState<MapPolygonsResponse | null>(null);
+  const [polygonsRes6, setPolygonsRes6] = useState<MapPolygonsResponse | null>(null);
   const [polygonsRes8, setPolygonsRes8] = useState<MapPolygonsResponse | null>(
     USE_SAMPLE_DATA ? SAMPLE_TEST_POLYGONS : null
   );
@@ -192,7 +199,17 @@ export default function MapScreen() {
   const cameraRef = useRef<Camera>(null);
 
   // Select which polygons to display based on zoom level
-  const revealedPolygons = currentZoom < 10 ? polygonsRes6 : polygonsRes8;
+  const revealedPolygons = (() => {
+    if (currentZoom < ZOOM_THRESHOLD_COUNTRY) {
+      return polygonsCountry;  // Very zoomed out: show countries
+    } else if (currentZoom < ZOOM_THRESHOLD_STATE) {
+      return polygonsState;    // Zoomed out: show states/regions
+    } else if (currentZoom < ZOOM_THRESHOLD_RES6) {
+      return polygonsRes6;     // Medium zoom: show large H3 cells
+    } else {
+      return polygonsRes8;     // Zoomed in: show detailed H3 cells
+    }
+  })();
 
   const fetchPolygonsForViewport = useCallback(
     async (bounds: MapBounds, zoom: number) => {
@@ -202,7 +219,9 @@ export default function MapScreen() {
       }
 
       // Skip fetching when zoomed out too far
-      if (zoom < MIN_ZOOM_FOR_CELLS) {
+      if (zoom < MIN_ZOOM_FOR_POLYGONS) {
+        setPolygonsCountry(null);
+        setPolygonsState(null);
         setPolygonsRes6(null);
         setPolygonsRes8(null);
         return;
@@ -221,14 +240,40 @@ export default function MapScreen() {
           max_lat: bounds.ne[1],
         };
 
-        // Fetch both resolutions in parallel for instant switching
-        const [res6Response, res8Response] = await Promise.all([
-          getMapPolygons(accessToken, bbox, 5), // Force res-6
-          getMapPolygons(accessToken, bbox, 15), // Force res-8
-        ]);
+        // Fetch only what's needed based on zoom level
+        // Country: zoom < 4, State: zoom 4-7, Res6: zoom 7-10, Res8: zoom >= 10
+        const fetchPromises: Promise<void>[] = [];
 
-        setPolygonsRes6(res6Response);
-        setPolygonsRes8(res8Response);
+        // Always fetch country/state for zoomed out views
+        if (zoom < ZOOM_THRESHOLD_STATE) {
+          fetchPromises.push(
+            getCountryPolygons(accessToken, bbox)
+              .then(setPolygonsCountry)
+              .catch(() => {})
+          );
+        }
+        if (zoom >= ZOOM_THRESHOLD_COUNTRY && zoom < ZOOM_THRESHOLD_RES6) {
+          fetchPromises.push(
+            getStatePolygons(accessToken, bbox)
+              .then(setPolygonsState)
+              .catch(() => {})
+          );
+        }
+        // Only fetch H3 cells when zoomed in enough (bounding box will be small enough)
+        if (zoom >= ZOOM_THRESHOLD_STATE) {
+          fetchPromises.push(
+            getMapPolygons(accessToken, bbox, 5)
+              .then(setPolygonsRes6)
+              .catch(() => {})
+          );
+          fetchPromises.push(
+            getMapPolygons(accessToken, bbox, 15)
+              .then(setPolygonsRes8)
+              .catch(() => {})
+          );
+        }
+
+        await Promise.all(fetchPromises);
       } catch {
         // Silently fail - fog of war is optional, map still works without it
       }

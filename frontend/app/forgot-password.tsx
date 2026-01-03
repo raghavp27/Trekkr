@@ -13,36 +13,84 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { forgotPassword } from '@/services/api';
 
-export default function LoginScreen() {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+export default function ForgotPasswordScreen() {
+    const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { login } = useAuth();
+    const [isSuccess, setIsSuccess] = useState(false);
     const router = useRouter();
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
 
-    const handleLogin = async () => {
-        if (!username.trim() || !password.trim()) {
-            Alert.alert('Error', 'Please fill in all fields');
+    const validateEmail = (email: string): boolean => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    };
+
+    const handleSubmit = async () => {
+        if (!email.trim()) {
+            Alert.alert('Error', 'Please enter your email address');
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            Alert.alert('Error', 'Please enter a valid email address');
             return;
         }
 
         setIsLoading(true);
         try {
-            await login(username.trim(), password);
-            router.replace('/(tabs)');
+            await forgotPassword({ email: email.trim() });
+            setIsSuccess(true);
         } catch (error: any) {
-            Alert.alert('Login Failed', error.message || 'Invalid credentials');
+            Alert.alert('Error', error.message || 'Failed to send reset email');
         } finally {
             setIsLoading(false);
         }
     };
+
+    if (isSuccess) {
+        return (
+            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+                <View style={styles.content}>
+                    {/* Success Icon */}
+                    <View style={styles.logoSection}>
+                        <View style={[styles.logoContainer, { backgroundColor: colors.tint }]}>
+                            <Ionicons name="mail-open" size={48} color="#fff" />
+                        </View>
+                        <Text style={[styles.appName, { color: colors.text }]}>Check Your Email</Text>
+                        <Text style={[styles.tagline, { color: colors.icon }]}>
+                            If an account with that email exists, we've sent password reset instructions.
+                        </Text>
+                    </View>
+
+                    {/* Action Card */}
+                    <View style={[styles.formCard, { backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#fff', borderColor: colors.icon + '30' }]}>
+                        <TouchableOpacity
+                            style={styles.button}
+                            onPress={() => router.push('/reset-password')}
+                        >
+                            <Text style={styles.buttonText}>Enter Reset Code</Text>
+                            <Ionicons name="arrow-forward" size={20} color="#fff" style={styles.buttonIcon} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.secondaryButton, { borderColor: colors.icon + '50' }]}
+                            onPress={() => router.replace('/login')}
+                        >
+                            <Ionicons name="arrow-back" size={20} color={colors.text} style={styles.secondaryButtonIcon} />
+                            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+                                Back to Sign In
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -59,27 +107,25 @@ export default function LoginScreen() {
                         {/* Logo Section */}
                         <View style={styles.logoSection}>
                             <View style={[styles.logoContainer, { backgroundColor: colors.tint }]}>
-                                <Ionicons name="compass" size={48} color="#fff" />
+                                <Ionicons name="key" size={48} color="#fff" />
                             </View>
-                            <Text style={[styles.appName, { color: colors.text }]}>Trekkr</Text>
+                            <Text style={[styles.appName, { color: colors.text }]}>Forgot Password?</Text>
                             <Text style={[styles.tagline, { color: colors.icon }]}>
-                                Explore the world, one step at a time
+                                No worries! Enter your email and we'll send you a reset code.
                             </Text>
                         </View>
 
                         {/* Form Card */}
                         <View style={[styles.formCard, { backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#fff', borderColor: colors.icon + '30' }]}>
-                            <Text style={[styles.formTitle, { color: colors.text }]}>Welcome Back</Text>
-
                             <View style={styles.inputContainer}>
                                 <View style={[styles.inputWrapper, { backgroundColor: colorScheme === 'dark' ? '#252525' : '#f5f5f5', borderColor: colors.icon + '30' }]}>
-                                    <Ionicons name="person-outline" size={20} color={colors.icon} style={styles.inputIcon} />
+                                    <Ionicons name="mail-outline" size={20} color={colors.icon} style={styles.inputIcon} />
                                     <TextInput
                                         style={[styles.input, { color: colors.text }]}
-                                        placeholder="Email or Username"
+                                        placeholder="Enter your email"
                                         placeholderTextColor={colors.icon}
-                                        value={username}
-                                        onChangeText={setUsername}
+                                        value={email}
+                                        onChangeText={setEmail}
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         keyboardType="email-address"
@@ -88,43 +134,17 @@ export default function LoginScreen() {
                                 </View>
                             </View>
 
-                            <View style={styles.inputContainer}>
-                                <View style={[styles.inputWrapper, { backgroundColor: colorScheme === 'dark' ? '#252525' : '#f5f5f5', borderColor: colors.icon + '30' }]}>
-                                    <Ionicons name="lock-closed-outline" size={20} color={colors.icon} style={styles.inputIcon} />
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Password"
-                                        placeholderTextColor={colors.icon}
-                                        value={password}
-                                        onChangeText={setPassword}
-                                        secureTextEntry
-                                        autoCapitalize="none"
-                                        editable={!isLoading}
-                                    />
-                                </View>
-                            </View>
-
-                            <TouchableOpacity
-                                onPress={() => router.push('/forgot-password')}
-                                disabled={isLoading}
-                                style={styles.forgotPasswordLink}
-                            >
-                                <Text style={[styles.forgotPasswordText, { color: colors.tint }]}>
-                                    Forgot Password?
-                                </Text>
-                            </TouchableOpacity>
-
                             <TouchableOpacity
                                 style={[styles.button, isLoading && styles.buttonDisabled]}
-                                onPress={handleLogin}
+                                onPress={handleSubmit}
                                 disabled={isLoading}
                             >
                                 {isLoading ? (
                                     <ActivityIndicator color="#fff" />
                                 ) : (
                                     <>
-                                        <Text style={styles.buttonText}>Sign In</Text>
-                                        <Ionicons name="arrow-forward" size={20} color="#fff" style={styles.buttonIcon} />
+                                        <Text style={styles.buttonText}>Send Reset Code</Text>
+                                        <Ionicons name="send" size={20} color="#fff" style={styles.buttonIcon} />
                                     </>
                                 )}
                             </TouchableOpacity>
@@ -133,13 +153,13 @@ export default function LoginScreen() {
                         {/* Footer */}
                         <View style={styles.footer}>
                             <Text style={[styles.footerText, { color: colors.icon }]}>
-                                {"Don't have an account? "}
+                                Remember your password?{' '}
                             </Text>
                             <TouchableOpacity
-                                onPress={() => router.push('/signup')}
+                                onPress={() => router.push('/login')}
                                 disabled={isLoading}
                             >
-                                <Text style={[styles.link, { color: colors.tint }]}>Sign Up</Text>
+                                <Text style={[styles.link, { color: colors.tint }]}>Sign In</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -177,13 +197,16 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     appName: {
-        fontSize: 36,
+        fontSize: 28,
         fontWeight: 'bold',
         marginBottom: 8,
+        textAlign: 'center',
     },
     tagline: {
-        fontSize: 16,
+        fontSize: 15,
         textAlign: 'center',
+        lineHeight: 22,
+        paddingHorizontal: 16,
     },
     formCard: {
         borderRadius: 16,
@@ -191,14 +214,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginBottom: 24,
     },
-    formTitle: {
-        fontSize: 24,
-        fontWeight: '600',
-        marginBottom: 24,
-        textAlign: 'center',
-    },
     inputContainer: {
-        marginBottom: 16,
+        marginBottom: 20,
     },
     inputWrapper: {
         flexDirection: 'row',
@@ -215,14 +232,6 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         height: '100%',
-    },
-    forgotPasswordLink: {
-        alignSelf: 'flex-end',
-        marginBottom: 24,
-    },
-    forgotPasswordText: {
-        fontSize: 14,
-        fontWeight: '600',
     },
     button: {
         backgroundColor: '#10b981',
@@ -243,6 +252,22 @@ const styles = StyleSheet.create({
     buttonIcon: {
         marginLeft: 8,
     },
+    secondaryButton: {
+        height: 56,
+        borderRadius: 12,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 12,
+        borderWidth: 1,
+    },
+    secondaryButtonIcon: {
+        marginRight: 8,
+    },
+    secondaryButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
     footer: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -255,6 +280,3 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
-
-
-

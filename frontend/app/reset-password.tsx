@@ -13,37 +13,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { resetPassword } from '@/services/api';
 
-export default function SignupScreen() {
-    const [email, setEmail] = useState('');
-    const [username, setUsername] = useState('');
+export default function ResetPasswordScreen() {
+    const [token, setToken] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { register } = useAuth();
     const router = useRouter();
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
 
     const validateForm = (): string | null => {
-        if (!email.trim() || !username.trim() || !password.trim() || !confirmPassword.trim()) {
+        if (!token.trim() || !password.trim() || !confirmPassword.trim()) {
             return 'Please fill in all fields';
-        }
-
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-            return 'Please enter a valid email address';
-        }
-
-        if (username.trim().length < 3) {
-            return 'Username must be at least 3 characters long';
-        }
-
-        if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-            return 'Username can only contain letters, numbers, and underscores';
         }
 
         if (password.length < 8) {
@@ -69,7 +55,7 @@ export default function SignupScreen() {
         return null;
     };
 
-    const handleSignup = async () => {
+    const handleSubmit = async () => {
         const validationError = validateForm();
         if (validationError) {
             Alert.alert('Validation Error', validationError);
@@ -78,10 +64,25 @@ export default function SignupScreen() {
 
         setIsLoading(true);
         try {
-            await register(email.trim(), username.trim(), password);
-            router.replace('/(tabs)');
+            await resetPassword({
+                token: token.trim(),
+                new_password: password,
+            });
+            Alert.alert(
+                'Success',
+                'Your password has been reset. Please sign in with your new password.',
+                [
+                    {
+                        text: 'Sign In',
+                        onPress: () => router.replace('/login'),
+                    },
+                ]
+            );
         } catch (error: any) {
-            Alert.alert('Signup Failed', error.message || 'An error occurred during signup');
+            Alert.alert(
+                'Reset Failed',
+                error.message || 'Invalid, expired, or already used reset code'
+            );
         } finally {
             setIsLoading(false);
         }
@@ -102,11 +103,11 @@ export default function SignupScreen() {
                         {/* Logo Section */}
                         <View style={styles.logoSection}>
                             <View style={[styles.logoContainer, { backgroundColor: colors.tint }]}>
-                                <Ionicons name="compass" size={40} color="#fff" />
+                                <Ionicons name="shield-checkmark" size={48} color="#fff" />
                             </View>
-                            <Text style={[styles.appName, { color: colors.text }]}>Join Trekkr</Text>
+                            <Text style={[styles.appName, { color: colors.text }]}>Reset Password</Text>
                             <Text style={[styles.tagline, { color: colors.icon }]}>
-                                Start your journey today
+                                Enter the code from your email and create a new password
                             </Text>
                         </View>
 
@@ -114,38 +115,18 @@ export default function SignupScreen() {
                         <View style={[styles.formCard, { backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#fff', borderColor: colors.icon + '30' }]}>
                             <View style={styles.inputContainer}>
                                 <View style={[styles.inputWrapper, { backgroundColor: colorScheme === 'dark' ? '#252525' : '#f5f5f5', borderColor: colors.icon + '30' }]}>
-                                    <Ionicons name="mail-outline" size={20} color={colors.icon} style={styles.inputIcon} />
+                                    <Ionicons name="key-outline" size={20} color={colors.icon} style={styles.inputIcon} />
                                     <TextInput
                                         style={[styles.input, { color: colors.text }]}
-                                        placeholder="Email"
+                                        placeholder="Reset code from email"
                                         placeholderTextColor={colors.icon}
-                                        value={email}
-                                        onChangeText={setEmail}
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                        keyboardType="email-address"
-                                        editable={!isLoading}
-                                    />
-                                </View>
-                            </View>
-
-                            <View style={styles.inputContainer}>
-                                <View style={[styles.inputWrapper, { backgroundColor: colorScheme === 'dark' ? '#252525' : '#f5f5f5', borderColor: colors.icon + '30' }]}>
-                                    <Ionicons name="person-outline" size={20} color={colors.icon} style={styles.inputIcon} />
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Username"
-                                        placeholderTextColor={colors.icon}
-                                        value={username}
-                                        onChangeText={setUsername}
+                                        value={token}
+                                        onChangeText={setToken}
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         editable={!isLoading}
                                     />
                                 </View>
-                                <Text style={[styles.hint, { color: colors.icon }]}>
-                                    Letters, numbers, and underscores only
-                                </Text>
                             </View>
 
                             <View style={styles.inputContainer}>
@@ -153,7 +134,7 @@ export default function SignupScreen() {
                                     <Ionicons name="lock-closed-outline" size={20} color={colors.icon} style={styles.inputIcon} />
                                     <TextInput
                                         style={[styles.input, { color: colors.text }]}
-                                        placeholder="Password"
+                                        placeholder="New password"
                                         placeholderTextColor={colors.icon}
                                         value={password}
                                         onChangeText={setPassword}
@@ -172,7 +153,7 @@ export default function SignupScreen() {
                                     <Ionicons name="shield-checkmark-outline" size={20} color={colors.icon} style={styles.inputIcon} />
                                     <TextInput
                                         style={[styles.input, { color: colors.text }]}
-                                        placeholder="Confirm Password"
+                                        placeholder="Confirm new password"
                                         placeholderTextColor={colors.icon}
                                         value={confirmPassword}
                                         onChangeText={setConfirmPassword}
@@ -185,15 +166,15 @@ export default function SignupScreen() {
 
                             <TouchableOpacity
                                 style={[styles.button, isLoading && styles.buttonDisabled]}
-                                onPress={handleSignup}
+                                onPress={handleSubmit}
                                 disabled={isLoading}
                             >
                                 {isLoading ? (
                                     <ActivityIndicator color="#fff" />
                                 ) : (
                                     <>
-                                        <Text style={styles.buttonText}>Create Account</Text>
-                                        <Ionicons name="arrow-forward" size={20} color="#fff" style={styles.buttonIcon} />
+                                        <Text style={styles.buttonText}>Reset Password</Text>
+                                        <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.buttonIcon} />
                                     </>
                                 )}
                             </TouchableOpacity>
@@ -202,7 +183,7 @@ export default function SignupScreen() {
                         {/* Footer */}
                         <View style={styles.footer}>
                             <Text style={[styles.footerText, { color: colors.icon }]}>
-                                Already have an account?{' '}
+                                Remember your password?{' '}
                             </Text>
                             <TouchableOpacity
                                 onPress={() => router.push('/login')}
@@ -238,21 +219,24 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     logoContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 24,
+        width: 100,
+        height: 100,
+        borderRadius: 28,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 16,
     },
     appName: {
         fontSize: 28,
         fontWeight: 'bold',
-        marginBottom: 4,
+        marginBottom: 8,
+        textAlign: 'center',
     },
     tagline: {
         fontSize: 15,
         textAlign: 'center',
+        lineHeight: 22,
+        paddingHorizontal: 16,
     },
     formCard: {
         borderRadius: 16,
@@ -316,6 +300,3 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
-
-
-
