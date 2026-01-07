@@ -3,7 +3,17 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trekkr.db")
+def get_database_url() -> str:
+    """Get database URL, ensuring correct driver for PostgreSQL."""
+    url = os.getenv("DATABASE_URL", "sqlite:///./trekkr.db")
+
+    # Render provides postgresql:// but SQLAlchemy needs postgresql+psycopg2://
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+    return url
+
+DATABASE_URL = get_database_url()
 
 # Determine database type and set appropriate connection args
 _is_sqlite = DATABASE_URL.startswith("sqlite")

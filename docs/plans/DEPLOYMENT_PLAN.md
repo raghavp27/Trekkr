@@ -1,10 +1,10 @@
-# Trekkr Backend Deployment Plan - Railway
+# Trekkr Backend Deployment Plan - Render
 
-This document outlines the complete deployment process for the Trekkr backend on Railway.
+This document outlines the complete deployment process for the Trekkr backend on Render.
 
 ## Table of Contents
 1. [Pre-Deployment Security Actions](#1-pre-deployment-security-actions)
-2. [Railway Project Setup](#2-railway-project-setup)
+2. [Render Project Setup](#2-render-project-setup)
 3. [Database Configuration](#3-database-configuration)
 4. [Environment Variables](#4-environment-variables)
 5. [Code Changes Required](#5-code-changes-required)
@@ -27,23 +27,22 @@ Your `.env` file is properly excluded from version control:
 
 ### For Production
 
-You'll create a **new** SendGrid API key specifically for production use in Railway's environment variables. Keep your local development key separate.
+You'll create a **new** SendGrid API key specifically for production use in Render's environment variables. Keep your local development key separate.
 
 ---
 
-## 2. Railway Project Setup
+## 2. Render Project Setup
 
-### Create Railway Project
+### Create Render Account
 
-1. Go to [Railway](https://railway.app) and create a new project
-2. Choose "Empty Project"
-3. Connect your GitHub repository (optional, for auto-deploy)
+1. Go to [Render](https://render.com) and sign up/login
+2. Connect your GitHub account for auto-deploy
 
 ### Project Structure
 
-Railway will need:
-- **Service**: The FastAPI backend
-- **Database**: PostgreSQL with PostGIS extension
+Render will need:
+- **Web Service**: The FastAPI backend
+- **PostgreSQL Database**: With PostGIS extension support
 
 ---
 
@@ -51,31 +50,42 @@ Railway will need:
 
 ### Add PostgreSQL Database
 
-1. In Railway project, click **"+ New"** → **"Database"** → **"PostgreSQL"**
-2. Railway automatically provisions the database and sets `DATABASE_URL`
+1. In Render Dashboard, click **"New +"** → **"PostgreSQL"**
+2. Configure database:
+   - **Name**: `trekkr-db` (or your preferred name)
+   - **Database**: `trekkr`
+   - **User**: `trekkr_user` (auto-generated)
+   - **Region**: Choose closest to your users
+   - **PostgreSQL Version**: 16 (matches local development)
+   - **Plan**: Free tier for testing, or paid for production
+
+3. Click **"Create Database"**
 
 ### PostGIS Extension
 
-Railway's PostgreSQL supports PostGIS. After the database is created, connect and run:
+Render's PostgreSQL supports PostGIS. After the database is created:
 
+**Via Render's PSQL Console:**
+1. Click on your database in Render Dashboard
+2. Go to "Shell" tab
+3. Run:
 ```sql
 CREATE EXTENSION IF NOT EXISTS postgis;
 ```
 
-**Option A: Via Railway's Query Tab**
-- Click on the PostgreSQL service
-- Go to "Data" tab
-- Run the SQL command above
-
-**Option B: Via psql connection**
+**Via External Tool (psql, pgAdmin, etc.):**
 ```bash
-# Get connection string from Railway dashboard
-psql $DATABASE_URL -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+# Get connection string from Render dashboard (External Database URL)
+psql <EXTERNAL_DATABASE_URL> -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 ```
 
 ### Database URL Format
 
-Railway provides `DATABASE_URL` in this format:
+Render provides connection strings in both formats:
+- **Internal Database URL**: For connecting from Render services (faster, free bandwidth)
+- **External Database URL**: For external connections
+
+Both use the format:
 ```
 postgresql://user:password@host:port/database
 ```
@@ -88,18 +98,19 @@ postgresql://user:password@host:port/database
 
 ### Required Environment Variables
 
-Set these in Railway's Variables tab for the backend service:
+Set these in Render's Environment section for the web service:
 
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `ENV` | `production` | Enables strict validation |
 | `SECRET_KEY` | `<generate-32+-char-secret>` | See generation command below |
-| `DATABASE_URL` | (auto-set by Railway) | Link to PostgreSQL service |
+| `DATABASE_URL` | (from database service) | Use Internal Database URL |
 | `SENDGRID_API_KEY` | `SG.xxx...` | New API key from SendGrid |
 | `SENDGRID_FROM_EMAIL` | `noreply@yourdomain.com` | Must be verified in SendGrid |
 | `FRONTEND_URL` | `https://your-frontend.com` | Your production frontend URL |
 | `CORS_ORIGINS` | `https://your-frontend.com` | Comma-separated if multiple |
-| `PORT` | (auto-set by Railway) | Railway injects this |
+| `PORT` | `10000` | Render's default port (auto-injected) |
+| `PYTHON_VERSION` | `3.11.0` | Specify Python version |
 
 ### Generate a Secure SECRET_KEY
 
@@ -123,63 +134,80 @@ Example output: `Abc123XyzRandomSecureKeyHere456789012`
 
 ## 5. Code Changes Required
 
-### 5.1 Create Dockerfile
+### 5.1 Create requirements.txt (if not exists)
 
-Create `backend/Dockerfile`:
+Ensure `backend/requirements.txt` includes all dependencies:
 
-```dockerfile
-FROM python:3.11-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies for psycopg2 and geospatial libraries
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    libgeos-dev \
-    libproj-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Expose port (Railway sets PORT env var)
-EXPOSE 8000
-
-# Run the application
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+```txt
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+h3==4.1.2
+slowapi==0.1.9
+sendgrid==6.11.0
+alembic==1.14.0
+geoalchemy2==0.15.2
+shapely==2.0.6
+requests==2.32.3
 ```
 
-### 5.2 Create railway.json (Optional)
+### 5.2 Create render.yaml (Infrastructure as Code - Optional)
 
-Create `backend/railway.json` for build configuration:
+Create `render.yaml` in project root for reproducible deployments:
 
-```json
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
-  },
-  "deploy": {
-    "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 30,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3
-  }
-}
+```yaml
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: trekkr-db
+    env: docker
+    region: oregon
+    plan: free
+    databaseName: trekkr
+    databaseUser: trekkr_user
+    ipAllowList: []
+
+  # FastAPI Backend
+  - type: web
+    name: trekkr-backend
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trekkr-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
 ```
 
 ### 5.3 Update Database URL Handling
 
-Railway provides `DATABASE_URL` without the `+psycopg2` driver suffix. Update `backend/database.py` to handle this:
+Render provides `DATABASE_URL` without the `+psycopg2` driver suffix. Update `backend/database.py` to handle this:
 
 **Current code (line 6):**
 ```python
@@ -192,7 +220,7 @@ def get_database_url() -> str:
     """Get database URL, ensuring correct driver for PostgreSQL."""
     url = os.getenv("DATABASE_URL", "sqlite:///./trekkr.db")
 
-    # Railway provides postgresql:// but SQLAlchemy needs postgresql+psycopg2://
+    # Render provides postgresql:// but SQLAlchemy needs postgresql+psycopg2://
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
@@ -209,7 +237,7 @@ Create `backend/scripts/init_production_db.py`:
 #!/usr/bin/env python
 """
 Initialize production database with required extensions and seed data.
-Run this once after deploying to Railway.
+Run this once after deploying to Render.
 """
 import os
 import sys
@@ -253,41 +281,25 @@ if __name__ == "__main__":
     init_database()
 ```
 
-### 5.5 Ensure .dockerignore Exists
+### 5.5 Create Build Script (Optional)
 
-Create `backend/.dockerignore`:
+Create `backend/build.sh` for custom build steps:
 
+```bash
+#!/usr/bin/env bash
+# exit on error
+set -o errexit
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run database migrations (if using Alembic)
+# alembic upgrade head
 ```
-# Development files
-.env
-.env.*
-.venv/
-venv/
-__pycache__/
-*.pyc
-*.pyo
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-tests/
-
-# IDE
-.vscode/
-.idea/
-
-# Docker dev files
-docker-compose.yml
-docker-init/
-
-# Documentation
-*.md
-docs/
-
-# Git
-.git/
-.gitignore
+Make it executable:
+```bash
+chmod +x backend/build.sh
 ```
 
 ---
@@ -296,43 +308,63 @@ docs/
 
 ### Option A: Deploy from GitHub (Recommended)
 
-1. In Railway, click **"+ New"** → **"GitHub Repo"**
-2. Select your repository
-3. Set **Root Directory** to `backend`
-4. Railway auto-detects Dockerfile and builds
+1. In Render Dashboard, click **"New +"** → **"Web Service"**
+2. Connect your GitHub repository
+3. Configure the service:
+   - **Name**: `trekkr-backend`
+   - **Region**: Choose closest to your users (same as database)
+   - **Branch**: `main`
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt` (or use `build.sh`)
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Plan**: Free tier for testing, or paid for production
 
-### Option B: Deploy via Railway CLI
+4. Click **"Advanced"** to configure:
+   - **Auto-Deploy**: Yes (deploys on git push)
+   - **Health Check Path**: `/api/health`
+
+5. Add environment variables (see Section 4)
+
+6. Click **"Create Web Service"**
+
+### Option B: Deploy via render.yaml
+
+1. Push `render.yaml` to your repository root
+2. In Render Dashboard, click **"New +"** → **"Blueprint"**
+3. Select your repository
+4. Render will auto-detect `render.yaml` and create all services
+5. Add secret environment variables manually (SENDGRID_API_KEY, etc.)
+
+### Option C: Deploy via Render CLI (Advanced)
 
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
+# Install Render CLI
+brew install render  # macOS
+# or download from https://render.com/docs/cli
 
 # Login
-railway login
-
-# Link to project
-railway link
+render login
 
 # Deploy
 cd backend
-railway up
+render deploy
 ```
 
 ### Configure Service Settings
 
-In Railway dashboard for the backend service:
+In Render dashboard for the web service:
 
-1. **Settings** → **Networking**:
-   - Enable "Public Networking" to get a public URL
-   - Or use Railway's internal networking for frontend-only access
+1. **Settings** → **Environment**:
+   - Add all environment variables from Section 4
+   - Link `DATABASE_URL` by selecting "From Database" and choosing your Render PostgreSQL service
 
-2. **Settings** → **Health Check**:
-   - Path: `/api/health`
-   - Timeout: 30 seconds
+2. **Settings** → **Health & Alerts**:
+   - Health Check Path: `/api/health`
+   - Expected Status Code: `200`
 
-3. **Variables**:
-   - Link `DATABASE_URL` to your PostgreSQL service
-   - Add all other environment variables from Section 4
+3. **Settings** → **Disk**:
+   - Not needed for this application (stateless)
 
 ---
 
@@ -340,33 +372,45 @@ In Railway dashboard for the backend service:
 
 After the first deployment, initialize the database with seed data.
 
-### Option A: Railway Shell (Recommended)
+### Option A: Render Shell (Recommended)
 
-1. Go to your backend service in Railway
-2. Click **"Shell"** or use CLI: `railway run bash`
+1. Go to your web service in Render Dashboard
+2. Click **"Shell"** tab in the top menu
 3. Run:
 
 ```bash
 python scripts/init_production_db.py
 ```
 
-### Option B: One-Time Deploy Command
+### Option B: Manual Database Connection
 
-Add to `railway.json`:
+1. Get the **External Database URL** from your database service in Render
+2. Connect using psql or your preferred client
+3. Run the SQL files manually:
 
-```json
-{
-  "deploy": {
-    "startCommand": "python scripts/init_production_db.py && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
-  }
-}
+```bash
+# Connect to database
+psql <EXTERNAL_DATABASE_URL>
+
+# In psql, run:
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+# Then run seed SQL files (you'll need to copy/paste content)
 ```
 
-**Note:** Remove the init script from startCommand after first successful run to avoid re-seeding on every deploy.
+### Option C: Add to Build Command (One-Time)
+
+**Warning:** Only use this approach once, then remove it to avoid re-seeding on every deploy.
+
+In Render web service settings:
+- **Build Command**: `pip install -r requirements.txt && python scripts/init_production_db.py`
+
+After successful first deploy, change back to:
+- **Build Command**: `pip install -r requirements.txt`
 
 ### Manual SQL Initialization (Alternative)
 
-If the script approach doesn't work, run these SQL files manually via Railway's database query tab:
+If the script approach doesn't work, run these SQL files manually via Render's database shell:
 
 1. `docker-init/00_extensions.sql` - PostGIS extension
 2. `docker-init/01_schema.sql` - Table creation (optional if using SQLAlchemy)
@@ -380,12 +424,12 @@ If the script approach doesn't work, run these SQL files manually via Railway's 
 ### Pre-Deployment
 
 - [ ] Generated new SendGrid API key for production
-- [ ] Created `backend/Dockerfile`
-- [ ] Created `backend/.dockerignore`
-- [ ] Updated `backend/database.py` for Railway's DATABASE_URL format
+- [ ] Updated `backend/database.py` for Render's DATABASE_URL format
+- [ ] Created `backend/scripts/init_production_db.py`
+- [ ] Created `render.yaml` (optional but recommended)
 - [ ] Committed and pushed all changes
 
-### Railway Configuration
+### Render Configuration
 
 - [ ] PostgreSQL database provisioned
 - [ ] PostGIS extension enabled
@@ -397,11 +441,13 @@ If the script approach doesn't work, run these SQL files manually via Railway's 
   - [ ] `SENDGRID_FROM_EMAIL`
   - [ ] `FRONTEND_URL`
   - [ ] `CORS_ORIGINS`
-- [ ] Backend service deployed successfully
+  - [ ] `PYTHON_VERSION=3.11.0`
+- [ ] Web service deployed successfully
+- [ ] Health check configured and passing
 
 ### Post-Deployment Verification
 
-- [ ] Health check passes: `GET https://your-backend.railway.app/api/health`
+- [ ] Health check passes: `GET https://your-backend.onrender.com/api/health`
 - [ ] Database initialized with seed data (250 countries, 5,096 states)
 - [ ] User registration works: `POST /api/auth/register`
 - [ ] Login works: `POST /api/auth/login`
@@ -411,8 +457,8 @@ If the script approach doesn't work, run these SQL files manually via Railway's 
 ### API Endpoint Tests
 
 ```bash
-# Set your Railway backend URL
-export API_URL="https://your-backend.railway.app"
+# Set your Render backend URL
+export API_URL="https://your-backend.onrender.com"
 
 # Health check
 curl $API_URL/api/health
@@ -434,27 +480,27 @@ curl -X POST $API_URL/api/auth/login \
 
 | File | Action | Description |
 |------|--------|-------------|
-| `backend/Dockerfile` | **CREATE** | Production container definition |
-| `backend/.dockerignore` | **CREATE** | Exclude dev files from image |
-| `backend/railway.json` | **CREATE** | Railway build/deploy config |
-| `backend/database.py` | **MODIFY** | Handle Railway's DATABASE_URL format |
+| `backend/database.py` | **MODIFY** | Handle Render's DATABASE_URL format |
 | `backend/scripts/init_production_db.py` | **CREATE** | Database initialization script |
+| `render.yaml` | **CREATE** (optional) | Infrastructure as code configuration |
+| `backend/build.sh` | **CREATE** (optional) | Custom build script |
 
 ---
 
 ## Troubleshooting
 
 ### "Connection refused" to database
-- Ensure DATABASE_URL is linked to the PostgreSQL service
+- Ensure DATABASE_URL is set correctly (use Internal Database URL from Render)
 - Check if the database service is running
+- Verify the database and web service are in the same region (free tier restriction)
 
 ### "PostGIS extension not found"
-- Run `CREATE EXTENSION IF NOT EXISTS postgis;` manually
-- Railway's PostgreSQL supports PostGIS but extension must be enabled
+- Run `CREATE EXTENSION IF NOT EXISTS postgis;` manually in Render's database shell
+- Render's PostgreSQL supports PostGIS but extension must be enabled
 
 ### "SECRET_KEY validation failed"
 - Ensure SECRET_KEY is at least 32 characters
-- Check there are no extra spaces or quotes
+- Check there are no extra spaces or quotes in environment variable
 
 ### Rate limiting returns 500 errors
 - Known issue: Rate limiter uses IP fallback for auth endpoints
@@ -464,29 +510,126 @@ curl -X POST $API_URL/api/auth/login \
 - Verify CORS_ORIGINS matches your frontend URL exactly
 - Include protocol (https://) and no trailing slash
 
+### Build failures
+- Check Render build logs in the "Events" tab
+- Ensure all dependencies in requirements.txt are compatible with Python 3.11
+- Verify `psycopg2-binary` is in requirements (not just `psycopg2`)
+
+### Service won't start / Health check failing
+- Check logs in Render dashboard "Logs" tab
+- Verify `PORT` environment variable is being used correctly
+- Ensure database migrations have run successfully
+- Test health endpoint locally first
+
+### Free tier limitations
+- Free web services spin down after 15 minutes of inactivity (first request after will be slow)
+- Free PostgreSQL databases have 1GB storage limit
+- Free tier services in different regions cannot connect
+
 ---
 
 ## Cost Estimate
 
-Railway pricing (as of 2024):
-- **Hobby Plan**: $5/month, includes:
-  - 500 hours of execution
-  - Shared resources
-  - Good for development/testing
+Render pricing (as of 2025):
 
-- **Pro Plan**: $20/month, includes:
-  - Unlimited execution hours
-  - More resources
-  - Better for production
+### Free Tier
+- **Web Services**:
+  - 750 hours/month free (spins down after 15 min inactivity)
+  - 0.1 CPU, 512MB RAM
+  - Perfect for development/testing
 
-PostgreSQL database usage is billed separately based on storage and compute.
+- **PostgreSQL**:
+  - Free tier available
+  - 1GB storage
+  - Expires after 90 days (must upgrade or recreate)
+
+### Paid Plans
+
+**Starter Plan** ($7/month per service):
+- Always-on (no spin down)
+- 0.5 CPU, 512MB RAM
+- Good for small production apps
+
+**Standard Plan** ($25/month per service):
+- 1 CPU, 2GB RAM
+- Better for production
+
+**PostgreSQL** ($7/month):
+- 1GB storage
+- No expiration
+- Additional storage: $0.25/GB/month
+
+### Estimated Monthly Cost for Production
+- Web Service (Starter): $7
+- PostgreSQL (Starter): $7
+- **Total**: ~$14/month
+
+---
+
+## Render vs Railway Comparison
+
+| Feature | Render | Railway | Notes |
+|---------|--------|---------|-------|
+| **Free Tier** | 750 hrs/month, spins down | $5/month, 500 hours | Render more generous for dev |
+| **Database** | Free tier available | Pay per use | Render free DB expires after 90 days |
+| **Deploy Speed** | Medium | Fast | Railway generally faster builds |
+| **Custom Domains** | Free on all tiers | Free on all tiers | Tie |
+| **Health Checks** | Built-in | Built-in | Tie |
+| **Shell Access** | Yes | Yes | Tie |
+| **Logs** | 7 days free tier | Real-time, limited history | Railway better log retention |
+| **Auto-deploy** | Yes (GitHub) | Yes (GitHub) | Tie |
+| **Infrastructure as Code** | `render.yaml` | `railway.json` | Both supported |
+
+**Why Render?**
+- More generous free tier for testing
+- Easier database management
+- Better documentation
+- Simpler pricing model
+- Good community support
 
 ---
 
 ## Next Steps After Deployment
 
-1. Set up custom domain (optional)
-2. Configure monitoring/alerting
-3. Set up CI/CD for automatic deployments
-4. Implement Redis for rate limiting (if scaling to multiple instances)
-5. Deploy the React Native frontend to connect to this backend
+1. **Custom Domain Setup** (optional):
+   - Go to web service → Settings → Custom Domain
+   - Add your domain and configure DNS
+
+2. **Monitoring & Alerts**:
+   - Configure notification emails in Render dashboard
+   - Set up health check alerts
+   - Consider integrating with monitoring service (Sentry, Datadog, etc.)
+
+3. **CI/CD Enhancements**:
+   - Add GitHub Actions for automated testing before deploy
+   - Set up preview environments for pull requests
+   - Configure deploy notifications (Slack, Discord, etc.)
+
+4. **Performance Optimization**:
+   - Consider Redis for rate limiting (if scaling to multiple instances)
+   - Enable connection pooling in SQLAlchemy
+   - Set up CDN for static assets (if any)
+
+5. **Security Hardening**:
+   - Enable Render's DDoS protection
+   - Set up rate limiting at the service level
+   - Regular security audits and dependency updates
+
+6. **Database Backups**:
+   - Configure automated backups in Render database settings
+   - Test restore procedure
+   - Consider point-in-time recovery for production
+
+7. **Frontend Deployment**:
+   - Deploy React Native web build to Render Static Site or Vercel
+   - Connect to this backend via FRONTEND_URL and CORS_ORIGINS
+
+---
+
+## Additional Resources
+
+- [Render Documentation](https://render.com/docs)
+- [Deploying FastAPI on Render](https://render.com/docs/deploy-fastapi)
+- [Render PostgreSQL Docs](https://render.com/docs/databases)
+- [Render Environment Variables](https://render.com/docs/environment-variables)
+- [Render Shell Access](https://render.com/docs/shell-access)
