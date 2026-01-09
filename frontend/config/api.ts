@@ -15,8 +15,8 @@ function getApiBaseUrl(): string {
             return "http://localhost:8000";
         }
     } else {
-        // Production mode - update with your production API URL
-        return "https://your-production-api.com";
+        // Production mode - Render deployment
+        return "https://trekkr-backend.onrender.com";
     }
 }
 

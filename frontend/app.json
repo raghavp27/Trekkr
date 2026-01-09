@@ -20,7 +20,7 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.raghav2007.trekkr"
+      "bundleIdentifier": "io.trekkr.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -39,7 +39,7 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
       ],
-      "package": "com.raghav2007.trekkr"
+      "package": "io.trekkr.app"
     },
     "web": {
       "output": "static",
