@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { UserResponse } from '@/services/api';
+import { HttpError, UserResponse } from '@/services/api';
 import * as api from '@/services/api';
 import { tokenStorage, userStorage } from '@/services/storage';
 
@@ -45,17 +45,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function tryRefreshToken() {
         try {
             const refreshToken = await tokenStorage.getRefreshToken();
-            if (refreshToken) {
-                const tokens = await api.refreshToken(refreshToken);
-                await tokenStorage.setTokens(tokens.access_token, tokens.refresh_token);
-                const userData = await api.getCurrentUser(tokens.access_token);
-                setUser(userData);
-                await userStorage.setUser(userData);
+            if (!refreshToken) {
+                // If we're offline and only have an access token, fall back to cached user.
+                const cachedUser = await userStorage.getUser().catch(() => null);
+                if (cachedUser) {
+                    setUser(cachedUser);
+                }
+                return;
             }
+
+            const tokens = await api.refreshToken(refreshToken);
+            await tokenStorage.setTokens(tokens.access_token, tokens.refresh_token);
+            const userData = await api.getCurrentUser(tokens.access_token);
+            setUser(userData);
+            await userStorage.setUser(userData);
         } catch (error) {
-            await tokenStorage.clearTokens();
-            await userStorage.clearUser();
-            setUser(null);
+            // Only wipe tokens when refresh is truly invalid/expired.
+            if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
+                await tokenStorage.clearTokens();
+                await userStorage.clearUser();
+                setUser(null);
+                return;
+            }
+
+            // Transient failure (offline/backend down/etc): keep tokens and use cached user if available.
+            const cachedUser = await userStorage.getUser().catch(() => null);
+            if (cachedUser) {
+                setUser(cachedUser);
+            }
         }
     }
 

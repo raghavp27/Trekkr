@@ -43,6 +43,18 @@ export interface MessageResponse {
     message: string;
 }
 
+export class HttpError extends Error {
+    status: number;
+    body?: unknown;
+
+    constructor(status: number, message: string, body?: unknown) {
+        super(message);
+        this.name = "HttpError";
+        this.status = status;
+        this.body = body;
+    }
+}
+
 export interface ChangePasswordData {
     current_password: string;
     new_password: string;
@@ -59,21 +71,39 @@ async function apiRequest<T>(
 ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-    });
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers,
+            },
+        });
+    } catch (error) {
+        // Network/DNS/offline/backend down: no HTTP response available.
+        throw new Error("NETWORK_ERROR");
+    }
 
     if (!response.ok) {
-        const error: ApiError = await response.json().catch(() => ({
-            detail: `HTTP ${response.status}: ${response.statusText}`,
-        }));
+        const errorBody: ApiError | undefined = await response.json().catch(() => undefined);
         // Handle different error formats from backend
-        const errorMessage = error.detail || error.message || error.error || `HTTP ${response.status}: ${response.statusText}`;
-        throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
+        const errorMessage =
+            errorBody?.detail ||
+            errorBody?.message ||
+            errorBody?.error ||
+            `HTTP ${response.status}: ${response.statusText}`;
+
+        throw new HttpError(
+            response.status,
+            typeof errorMessage === "string" ? errorMessage : JSON.stringify(errorMessage),
+            errorBody
+        );
+    }
+
+    // Some endpoints intentionally return no content (e.g. 204).
+    if (response.status === 204) {
+        return undefined as T;
     }
 
     return response.json();

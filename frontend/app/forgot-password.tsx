@@ -63,7 +63,7 @@ export default function ForgotPasswordScreen() {
                         </View>
                         <Text style={[styles.appName, { color: colors.text }]}>Check Your Email</Text>
                         <Text style={[styles.tagline, { color: colors.icon }]}>
-                            If an account with that email exists, we've sent password reset instructions.
+                            If an account with that email exists, we&apos;ve sent password reset instructions.
                         </Text>
                     </View>
 
@@ -111,7 +111,7 @@ export default function ForgotPasswordScreen() {
                             </View>
                             <Text style={[styles.appName, { color: colors.text }]}>Forgot Password?</Text>
                             <Text style={[styles.tagline, { color: colors.icon }]}>
-                                No worries! Enter your email and we'll send you a reset code.
+                                No worries! Enter your email and we&apos;ll send you a reset code.
                             </Text>
                         </View>
 

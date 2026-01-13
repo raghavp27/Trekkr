@@ -2,6 +2,12 @@ import { Platform } from "react-native";
 
 // Determine the correct base URL based on platform and environment
 function getApiBaseUrl(): string {
+    // Allow overriding via Expo public env var (works on native + web).
+    const envUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (envUrl) {
+        return envUrl;
+    }
+
     if (__DEV__) {
         // Development mode
         if (Platform.OS === "android") {
