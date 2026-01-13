@@ -117,24 +117,66 @@ export async function startLocationTracking(
     }
 
     try {
-        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-            accuracy: Location.Accuracy.High,
-            distanceInterval: MIN_DISTANCE_METERS,
-            timeInterval: MIN_TIME_MS,
-            foregroundService: {
-                notificationTitle: 'Trekkr',
-                notificationBody: 'Tracking your exploration',
-                notificationColor: '#10b981',
-            },
-            pausesUpdatesAutomatically: false,
-            activityType: Location.ActivityType.Fitness,
-            showsBackgroundLocationIndicator: true,
-        });
+        await startNativeLocationUpdates();
 
         console.log('[LocationTracking] Started background tracking');
         return true;
     } catch (error) {
         console.error('[LocationTracking] Failed to start tracking:', error);
+        return false;
+    }
+}
+
+async function startNativeLocationUpdates(): Promise<void> {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: MIN_DISTANCE_METERS,
+        timeInterval: MIN_TIME_MS,
+        // Android-only foreground notification while tracking in background
+        foregroundService: {
+            notificationTitle: 'Trekkr',
+            notificationBody: 'Tracking your exploration',
+            notificationColor: '#10b981',
+        },
+        pausesUpdatesAutomatically: false,
+        activityType: Location.ActivityType.Fitness,
+        showsBackgroundLocationIndicator: true,
+    });
+}
+
+/**
+ * Best-effort resume without prompting for permissions.
+ * Useful on cold start: only starts if the user already granted permissions.
+ */
+export async function resumeLocationTrackingIfPossible(
+    newCallbacks?: LocationTrackingCallbacks
+): Promise<boolean> {
+    if (newCallbacks) {
+        callbacks = { ...callbacks, ...newCallbacks };
+    }
+
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (isTracking) {
+        return true;
+    }
+
+    const foreground = await Location.getForegroundPermissionsAsync();
+    if (foreground.status !== 'granted') {
+        return false;
+    }
+
+    // Background permission may not be granted yet; if it's not, do not prompt on startup.
+    const background = await Location.getBackgroundPermissionsAsync();
+    if (background.status !== 'granted') {
+        return false;
+    }
+
+    try {
+        await startNativeLocationUpdates();
+        console.log('[LocationTracking] Resumed background tracking (no prompt)');
+        return true;
+    } catch (error) {
+        console.error('[LocationTracking] Failed to resume tracking:', error);
         return false;
     }
 }

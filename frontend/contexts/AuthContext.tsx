@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { HttpError, UserResponse } from '@/services/api';
 import * as api from '@/services/api';
-import { tokenStorage, userStorage } from '@/services/storage';
+import { locationPreferencesStorage, tokenStorage, userStorage } from '@/services/storage';
+import { stopLocationTracking } from '@/services/locationTracking';
 
 interface AuthContextType {
     user: UserResponse | null;
@@ -101,6 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             // Continue with logout even if API call fails
         } finally {
+            // Ensure we don't keep background tracking active after logout.
+            await locationPreferencesStorage.setLocationTrackingEnabled(false);
+            await stopLocationTracking();
             await tokenStorage.clearTokens();
             await userStorage.clearUser();
             setUser(null);

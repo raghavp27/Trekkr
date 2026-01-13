@@ -21,7 +21,7 @@ import {
   MapPolygonsResponse,
   LocationIngestResponse,
 } from "@/services/api";
-import { tokenStorage } from "@/services/storage";
+import { locationPreferencesStorage, tokenStorage } from "@/services/storage";
 import {
   startLocationTracking,
   stopLocationTracking,
@@ -350,12 +350,14 @@ export default function MapScreen() {
     if (isTracking) {
       await stopLocationTracking();
       setIsTracking(false);
+      await locationPreferencesStorage.setLocationTrackingEnabled(false);
     } else {
       const success = await startLocationTracking({
         onLocationUpdate: handleLocationUpdate,
         onNewDiscovery: handleNewDiscovery,
       });
       setIsTracking(success);
+      await locationPreferencesStorage.setLocationTrackingEnabled(success);
 
       if (success) {
         // Send immediate location update
